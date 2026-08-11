@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runLogin } from "./commands/login.js";
 
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const { version } = JSON.parse(
@@ -12,13 +13,10 @@ const { version } = JSON.parse(
 const [, , command] = process.argv;
 
 if (!command) {
-  console.log(
-    `hatchcli ${version} — infrastructure skeleton, no product commands implemented yet.`,
-  );
-  process.exit(0);
+  console.log(`hatchcli ${version}`);
+} else if (command === "login") {
+  process.exitCode = await runLogin();
+} else {
+  console.error(`hatchcli: unknown command "${command}".`);
+  process.exitCode = 1;
 }
-
-console.error(
-  `hatchcli: unknown command "${command}" — no product commands implemented yet.`,
-);
-process.exit(1);
