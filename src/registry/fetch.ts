@@ -34,17 +34,19 @@ type ContentsResponse =
   | { kind: "network-error"; message: string }
   | { kind: "unexpected-status"; status: number };
 
-function contentsUrl(path: string): string {
-  return `https://api.github.com/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/contents/${path}`;
+function contentsUrl(path: string, ref?: string): string {
+  const base = `https://api.github.com/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}/contents/${path}`;
+  return ref ? `${base}?ref=${encodeURIComponent(ref)}` : base;
 }
 
 async function getContents(
   token: string,
   path: string,
+  ref?: string,
 ): Promise<ContentsResponse> {
   let response: Response;
   try {
-    response = await fetch(contentsUrl(path), {
+    response = await fetch(contentsUrl(path, ref), {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
@@ -117,18 +119,66 @@ export async function registryFolderExists(
   return { ok: true, exists: result.kind === "ok" };
 }
 
+export interface RegistryFileOk {
+  ok: true;
+  content: string;
+}
+
+export type RegistryFileResult = RegistryFileOk | RegistryFetchFailure;
+
+// Fetches a single file's content — used to inspect a candidate registry
+// folder's own skill.json (e.g. to classify it as a group vs. a plain
+// skill, per 0016-group-member-manifest-format.md) without paying for a
+// full recursive fetch of content that might not even be needed.
+export async function fetchRegistryFile(
+  token: string,
+  path: string,
+  ref?: string,
+): Promise<RegistryFileResult> {
+  const result = await getContents(token, path, ref);
+
+  if (result.kind === "network-error") {
+    return {
+      ok: false,
+      reason: "unreachable",
+      detail: `could not reach the registry (${result.message})`,
+    };
+  }
+  if (result.kind === "not-found") {
+    return {
+      ok: false,
+      reason: "not-found",
+      detail: `"${path}" was not found in the registry`,
+    };
+  }
+  if (result.kind === "unexpected-status") {
+    return {
+      ok: false,
+      reason: "unreachable",
+      detail: `the registry responded with an unexpected status (${result.status})`,
+    };
+  }
+
+  const entry = Array.isArray(result.body) ? result.body[0] : result.body;
+  return { ok: true, content: decodeFile(entry) };
+}
+
 // Fetches every file under `folderName` (recursing into subdirectories),
 // returning each file's content keyed by its path relative to that folder.
+// `ref` resolves a specific historical version via the `<name>@<version>`
+// tag mechanism (0009-skill-versioning-semver-tags.md); omitted means
+// latest (`main`).
 export async function fetchRegistryFolder(
   token: string,
   folderName: string,
+  ref?: string,
 ): Promise<RegistryFetchResult> {
   const files = new Map<string, string>();
   const queue: string[] = [folderName];
 
   while (queue.length > 0) {
     const path = queue.shift() as string;
-    const result = await getContents(token, path);
+    const result = await getContents(token, path, ref);
 
     if (result.kind === "network-error") {
       return {
@@ -162,7 +212,7 @@ export async function fetchRegistryFolder(
         continue;
       }
 
-      const fileResult = await getContents(token, entry.path);
+      const fileResult = await getContents(token, entry.path, ref);
       if (fileResult.kind === "network-error") {
         return {
           ok: false,

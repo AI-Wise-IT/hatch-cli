@@ -60,6 +60,7 @@ UC-3 AF-4 ("deprecated or removed skill/group detected") already assumed "remove
 - `hatch import` must implement the pinned-version-conflict rule as a distinct code path, including the atomic abort-on-MAJOR-conflict case (no placement, no manifest change, no commit).
 - The skill-content repo needs a new required CI check enforcing name permanence, alongside the existing version-bump-check ([0009](0009-skill-versioning-semver-tags.md)) and the new collision-detection check ([0014](0014-registry-collision-detection.md)).
 - `docs/use-cases/import-content.md` (UC-3) needs a new alternative flow describing the pinned-pointer version-conflict behavior — this record establishes the mechanism; the use-case document does not yet reflect it.
+- The concrete on-disk format for a group's member list, left open here, is settled by [0016-group-member-manifest-format](0016-group-member-manifest-format.md). Whether/how the project manifest records group membership, also left open here, is settled by [0017-manifest-schema-v2-group-membership](0017-manifest-schema-v2-group-membership.md).
 - UC-3 AF-4's "deprecated or removed" wording should be read, from this record forward, as "removed" meaning metadata-flagged, never an actual folder deletion.
 - [0014-registry-collision-detection](0014-registry-collision-detection.md)'s collision guarantee depends directly on this record's name-permanence rule.
 
@@ -86,4 +87,6 @@ Expected result: empty — no `skill.json` file (i.e. no top-level skill/group f
 - Builds on and extends [0001-harness-suffix-convention](0001-harness-suffix-convention.md) — that record fixed skill-folder layout and harness-suffix resolution but explicitly left group internal structure and name-permanence policy open; this record settles both without contradicting it.
 - Builds on [0009-skill-versioning-semver-tags](0009-skill-versioning-semver-tags.md) — reuses its MAJOR/MINOR-PATCH compatibility definition for pinned-pointer conflict resolution, and its `<name>@<version>` tag mechanism for pinning a pointer.
 - [0014-registry-collision-detection](0014-registry-collision-detection.md)'s soundness depends on this record's name-permanence rule.
+- [0016-group-member-manifest-format](0016-group-member-manifest-format.md) resolves this record's own deferred open item: the concrete file format for a group's member list.
+- [0017-manifest-schema-v2-group-membership](0017-manifest-schema-v2-group-membership.md) resolves this record's own deferred open item: how the project manifest records group membership.
 - No known conflicting decision records.

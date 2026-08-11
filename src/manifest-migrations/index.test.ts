@@ -15,4 +15,17 @@ describe("migrateManifest", () => {
       /No migration registered/,
     );
   });
+
+  it("migrates a v1 manifest to v2 as a schema-only bump (0017-manifest-schema-v2-group-membership)", () => {
+    const v1 = {
+      schemaVersion: 1,
+      harnesses: ["claude"],
+      skills: { "hatch-usage": { version: "1.0.0" } },
+    };
+    expect(migrateManifest(v1)).toEqual({
+      schemaVersion: 2,
+      harnesses: ["claude"],
+      skills: { "hatch-usage": { version: "1.0.0" } },
+    });
+  });
 });

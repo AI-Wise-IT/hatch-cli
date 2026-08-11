@@ -22,6 +22,7 @@ vi.mock("../cli/prompt.js", () => ({
   promptLine: vi.fn(),
 }));
 vi.mock("../registry/fetch.js", () => ({
+  fetchRegistryFile: vi.fn(),
   fetchRegistryFolder: vi.fn(),
   registryFolderExists: vi.fn(),
 }));
@@ -37,9 +38,8 @@ const { resolveToken, writeCredentials } = await import(
 );
 const { validateGitHubToken } = await import("../auth/github-token.js");
 const { promptHidden, promptLine } = await import("../cli/prompt.js");
-const { fetchRegistryFolder, registryFolderExists } = await import(
-  "../registry/fetch.js"
-);
+const { fetchRegistryFile, fetchRegistryFolder, registryFolderExists } =
+  await import("../registry/fetch.js");
 const { simpleGit } = await import("simple-git");
 const { runImport } = await import("./import.js");
 
@@ -99,6 +99,15 @@ beforeEach(() => {
     ok: true,
     files: skillFiles(),
   });
+  // Default: the classification lookup (does <name>/skill.json exist and
+  // does it have "members"?) finds nothing, so every existing standalone
+  // test's target is treated as a plain skill, same as before groups
+  // existed.
+  vi.mocked(fetchRegistryFile).mockReset().mockResolvedValue({
+    ok: false,
+    reason: "not-found",
+    detail: "not found",
+  });
 });
 
 afterEach(() => {
@@ -135,7 +144,7 @@ describe("runImport — main flow", () => {
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
     expect(manifest).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       harnesses: ["claude", "codex"],
       skills: { "hatch-usage": { version: "1.0.0" } },
     });
@@ -474,5 +483,316 @@ describe("runImport — rollback on partial failure", () => {
       existsSync(join(target, ".claude", "skills", "hatch-usage", "SKILL.md")),
     ).toBe(false);
     expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+  });
+});
+
+// Group-json helper matching 0016-group-member-manifest-format.md's shape.
+function groupSkillJson(version: string, members: unknown[]): string {
+  return JSON.stringify({ version, members });
+}
+function plainSkillJson(version: string): string {
+  return JSON.stringify({ version });
+}
+
+describe("runImport — group import (0013, 0016)", () => {
+  it("imports a group with only nested members as flat, individual entries under each declared harness, one commit", async () => {
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "my-group/skill.json") {
+        return {
+          ok: true,
+          content: groupSkillJson("1.0.0", [
+            { kind: "nested", name: "a" },
+            { kind: "nested", name: "b" },
+          ]),
+        };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(async (_token, name) => {
+      if (name === "my-group") {
+        return {
+          ok: true,
+          files: new Map([
+            [
+              "skill.json",
+              groupSkillJson("1.0.0", [
+                { kind: "nested", name: "a" },
+                { kind: "nested", name: "b" },
+              ]),
+            ],
+            ["a/SKILL.md", "# A"],
+            ["b/SKILL.md", "# B"],
+          ]),
+        };
+      }
+      throw new Error(`unexpected fetch of ${name}`);
+    });
+
+    const exitCode = await runImport([
+      "my-group",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(join(target, ".claude", "skills", "a", "SKILL.md"), "utf8"),
+    ).toBe("# A");
+    expect(
+      readFileSync(join(target, ".claude", "skills", "b", "SKILL.md"), "utf8"),
+    ).toBe("# B");
+
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest).toEqual({
+      schemaVersion: 2,
+      harnesses: ["claude"],
+      skills: {
+        a: { version: "1.0.0", group: "my-group" },
+        b: { version: "1.0.0", group: "my-group" },
+        "my-group": { version: "1.0.0" },
+      },
+    });
+
+    const log = await simpleGit(target).log();
+    expect(log.total).toBe(1);
+  });
+
+  it("imports a group with a pointer to a standalone skill and a pointer to another group, flattening with no duplicate placement", async () => {
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "combo-group/skill.json") {
+        return {
+          ok: true,
+          content: groupSkillJson("1.0.0", [
+            { kind: "pointer", name: "prd-elicitation" },
+            { kind: "pointer", name: "sub-group" },
+          ]),
+        };
+      }
+      if (path === "prd-elicitation/skill.json") {
+        return { ok: true, content: plainSkillJson("3.0.0") };
+      }
+      if (path === "sub-group/skill.json") {
+        return {
+          ok: true,
+          content: groupSkillJson("2.0.0", [
+            { kind: "nested", name: "inner-skill" },
+          ]),
+        };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(async (_token, name) => {
+      if (name === "combo-group") {
+        return {
+          ok: true,
+          files: new Map([
+            [
+              "skill.json",
+              groupSkillJson("1.0.0", [
+                { kind: "pointer", name: "prd-elicitation" },
+                { kind: "pointer", name: "sub-group" },
+              ]),
+            ],
+          ]),
+        };
+      }
+      if (name === "prd-elicitation") {
+        return {
+          ok: true,
+          files: new Map([
+            ["skill.json", plainSkillJson("3.0.0")],
+            ["SKILL.md", "# PRD"],
+          ]),
+        };
+      }
+      if (name === "sub-group") {
+        return {
+          ok: true,
+          files: new Map([
+            [
+              "skill.json",
+              groupSkillJson("2.0.0", [
+                { kind: "nested", name: "inner-skill" },
+              ]),
+            ],
+            ["inner-skill/SKILL.md", "# Inner"],
+          ]),
+        };
+      }
+      throw new Error(`unexpected fetch of ${name}`);
+    });
+
+    const exitCode = await runImport([
+      "combo-group",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(
+        join(target, ".claude", "skills", "prd-elicitation", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe("# PRD");
+    expect(
+      readFileSync(
+        join(target, ".claude", "skills", "inner-skill", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe("# Inner");
+    // Flattened, never a nested "sub-group" folder.
+    expect(existsSync(join(target, ".claude", "skills", "sub-group"))).toBe(
+      false,
+    );
+
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills).toEqual({
+      "prd-elicitation": { version: "3.0.0", group: "combo-group" },
+      "inner-skill": { version: "2.0.0", group: "combo-group" },
+      "combo-group": { version: "1.0.0" },
+    });
+    expect(fetchRegistryFolder).toHaveBeenCalledWith(
+      "existing-session-token",
+      "prd-elicitation",
+      undefined,
+    );
+  });
+});
+
+describe("runImport — AF-9: pinned-pointer version conflict within a group", () => {
+  it("resolves a same-MAJOR conflict to the highest pinned version, warns naming both, and completes", async () => {
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "conflict-group/skill.json") {
+        return {
+          ok: true,
+          content: groupSkillJson("1.0.0", [
+            { kind: "pointer", name: "shared", version: "1.2.0" },
+            { kind: "pointer", name: "shared", version: "1.5.0" },
+          ]),
+        };
+      }
+      if (path === "shared/skill.json") {
+        return { ok: true, content: plainSkillJson("1.2.0") };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(
+      async (_token, name, ref) => {
+        if (name === "conflict-group") {
+          return {
+            ok: true,
+            files: new Map([
+              [
+                "skill.json",
+                groupSkillJson("1.0.0", [
+                  { kind: "pointer", name: "shared", version: "1.2.0" },
+                  { kind: "pointer", name: "shared", version: "1.5.0" },
+                ]),
+              ],
+            ]),
+          };
+        }
+        if (name === "shared") {
+          expect(ref).toBe("shared@1.5.0"); // only the winning pin is ever fetched
+          return {
+            ok: true,
+            files: new Map([
+              ["skill.json", plainSkillJson("1.5.0")],
+              ["SKILL.md", "# shared v1.5"],
+            ]),
+          };
+        }
+        throw new Error(`unexpected fetch of ${name}`);
+      },
+    );
+
+    const exitCode = await runImport([
+      "conflict-group",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(
+        join(target, ".claude", "skills", "shared", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe("# shared v1.5");
+    expect(
+      consoleLogs.some((m) => m.includes("1.2.0") && m.includes("1.5.0")),
+    ).toBe(true);
+
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills.shared).toEqual({
+      version: "1.5.0",
+      group: "conflict-group",
+    });
+  });
+
+  it("aborts the whole import on a cross-MAJOR conflict — nothing placed, no manifest change, no commit", async () => {
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "abort-group/skill.json") {
+        return {
+          ok: true,
+          content: groupSkillJson("1.0.0", [
+            { kind: "pointer", name: "shared", version: "1.9.0" },
+            { kind: "pointer", name: "shared", version: "2.0.0" },
+          ]),
+        };
+      }
+      if (path === "shared/skill.json") {
+        return { ok: true, content: plainSkillJson("1.9.0") };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(async (_token, name) => {
+      if (name === "abort-group") {
+        return {
+          ok: true,
+          files: new Map([
+            [
+              "skill.json",
+              groupSkillJson("1.0.0", [
+                { kind: "pointer", name: "shared", version: "1.9.0" },
+                { kind: "pointer", name: "shared", version: "2.0.0" },
+              ]),
+            ],
+          ]),
+        };
+      }
+      throw new Error(`unexpected fetch of ${name}`);
+    });
+
+    const exitCode = await runImport([
+      "abort-group",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some(
+        (m) =>
+          m.includes("shared") && m.includes("1.9.0") && m.includes("2.0.0"),
+      ),
+    ).toBe(true);
+    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expect(existsSync(join(target, ".claude", "skills", "shared"))).toBe(false);
   });
 });

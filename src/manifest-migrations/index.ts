@@ -2,15 +2,20 @@
 // Every command that reads the manifest routes it through migrateManifest()
 // before using its contents.
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 type Manifest = Record<string, unknown>;
 type Migration = (manifest: Manifest) => Manifest;
 
 // Keyed by the schema version a migration function migrates *from*.
-// Empty for now — schema version 1 is the first shape `hatch new` writes,
-// so the first real migration (1 -> 2) is added here when it's needed.
-const migrations: Record<number, Migration> = {};
+const migrations: Record<number, Migration> = {
+  // v1 -> v2 (0017-manifest-schema-v2-group-membership.md): adds an
+  // optional `group` field per skill entry and group entries recorded in
+  // `skills` alongside skills — both purely additive, so this migration is
+  // a schema-version bump only; no existing v1 field is renamed or removed,
+  // and nothing is backfilled onto pre-existing entries.
+  1: (manifest) => manifest,
+};
 
 export function migrateManifest(manifest: Manifest): Manifest {
   let current = manifest;
