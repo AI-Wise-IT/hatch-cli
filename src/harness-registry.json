@@ -1,0 +1,16 @@
+{
+  "harnesses": {
+    "claude": {
+      "code": "cld",
+      "skillsDir": ".claude/skills"
+    },
+    "codex": {
+      "code": "cdx",
+      "skillsDir": ".codex/skills"
+    },
+    "cursor": {
+      "code": "csr",
+      "skillsDir": ".cursor/skills"
+    }
+  }
+}
