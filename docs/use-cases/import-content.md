@@ -48,6 +48,7 @@ Triggered on every `hatch import` run, regardless of what's being explicitly imp
 - If any are deprecated or removed, the project is left working unaffected.
 - System surfaces a warning listing them, alongside whatever the primary command was doing.
 - Terminates in Success alongside the primary outcome.
+- "Removed" means the registry has flagged the skill/group as removed in its own metadata, not that it was deleted — registry names are permanent and never deleted or reused (see ADR-0013), so the flagged item's content remains fetchable if still referenced (e.g. by a group pointer); only its status changes.
 
 ### AF-5: Add a harness (backfill)
 Triggered by `hatch import --add-harness <name>`, with no skill/group target.
@@ -77,17 +78,27 @@ Triggered at step 3 when the supplied password is wrong.
 - Developer is informed the password is invalid.
 - Terminates in Failure.
 
+### AF-9: Pinned-pointer version conflict within a group
+Triggered at step 4, while unpacking a group whose members are resolved via pointers (including pointers to other groups, per ADR-0013) — two or more pointer paths reach the same skill name pinned to different versions.
+- If the conflicting pinned versions share the same MAJOR version: system resolves to the highest pinned version and surfaces a warning naming every conflicting pin and which one was used.
+  - The rest of the import proceeds normally; the warning is included in the summary.
+  - Terminates in Success alongside the primary outcome.
+- If the conflicting pinned versions differ in MAJOR version: system aborts the entire import — nothing is placed, no manifest change, no commit — reporting the skill name and the conflicting pinned versions.
+  - Terminates in Failure.
+
 ## Postconditions
 
 - **Success:** The target skill/group (or harness backfill) is correctly reflected in the project — content placed per declared harnesses, manifest updated, one commit made — except where AF-1 (no-op) or AF-3 (local edits protected) apply, in which case that specific item is left exactly as it was. Any deprecation warning is surfaced regardless of the primary outcome.
-- **Failure:** No changes are made anywhere — no content placed, no manifest change, no commit — when the registry is unreachable or authentication fails.
+- **Failure:** No changes are made anywhere — no content placed, no manifest change, no commit — when the registry is unreachable, authentication fails, or a group's pinned-pointer members conflict across different MAJOR versions (AF-9).
 
 ## Business Rules
 
 - One `hatch import` invocation produces at most one commit, deterministic and reviewable, regardless of how many files or skills it touches (single skill, whole group, or harness backfill).
 - A group is always fetched and imported as a whole — never one skill out of a group individually.
+- A group's members may be physically part of the group's own folder, or a named pointer to a skill (or another group) living elsewhere in the registry, optionally pinned to an exact version (see ADR-0013). Deployment always unpacks a group into flat, individual entries in the target project — never as one nested group folder.
+- A pinned-pointer version conflict within one import is resolved deterministically, never silently guessed: highest pinned version wins with a warning when the conflicting versions share a MAJOR version; the whole import is blocked otherwise (see AF-9).
 - Placed content is never overwritten if it differs from what was originally imported — a local edit is assumed intentional.
 - Deprecation/removal checks run on every invocation and cover all previously-imported skills/groups, not just the one being acted on.
 - The destination-occupied conflict can be resolved interactively or, for unattended/cloud-agent runs, defaults to skipping the conflicting file rather than blocking.
 - Harness placement is governed by the project manifest's recorded harness(es), never by scanning the filesystem for which harness folders happen to exist.
-- No two skills in the registry may claim the same destination path — that invariant is enforced separately at the registry level (see UC-5 — Prevent destination-path collisions across the registry). This use case's destination-occupied handling is specifically about a pre-existing, non-Hatch-placed file already sitting at a path, not a registry-level collision.
+- No two skills in the registry may claim the same destination path — that invariant is enforced separately at the registry level (see UC-5 — Prevent destination-path collisions across the registry), using the same resolution logic `hatch import` itself uses (see ADR-0014), not a separate reimplementation. This use case's destination-occupied handling is specifically about a pre-existing, non-Hatch-placed file already sitting at a path, not a registry-level collision.
