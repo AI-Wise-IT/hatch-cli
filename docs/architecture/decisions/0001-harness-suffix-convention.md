@@ -50,7 +50,7 @@ The three harnesses in scope today are Claude, Codex, and Cursor, with abbreviat
 - `hatch import`'s resolution logic must implement "prefer `<name>-<H-code>/`, else `<name>/`, else unavailable" for its target harness, reading `<H-code>` from the harness registry, and must strip the harness-code suffix at deployment time.
 - The registry's "no duplicate destination path" publish lint must be extended to flag any skill name ending in a code from the harness registry's reserved set, for human review before publishing, whether or not it's an intentional variant.
 - Tessl will grade and list each harness-suffixed family member as a fully independent registry entry with no merged identity — accepted and confirmed by the developer.
-- Not yet covered by this record, and left open for a later decision if needed: how Hatch's own project-level manifest records which harness(es) a project uses, and how a new harness would be onboarded end-to-end.
+- How Hatch's own project-level manifest records which harness(es) a project uses is now settled by [0015-import-harness-selection-flag](0015-import-harness-selection-flag.md) (an explicit `--harness` flag on `hatch import`, mirroring `hatch new`'s). How a new harness would be onboarded end-to-end remains open for a later decision if needed.
 
 ## Agent Rules
 
@@ -77,4 +77,5 @@ Expected result: every path listed is a deliberate harness-specific variant, con
 - [0002-cli-runtime-nodejs](0002-cli-runtime-nodejs.md) resolves this record's harness-registry-location TODO — see updated Consequences above.
 - [0013-registry-group-structure-and-permanence](0013-registry-group-structure-and-permanence.md) extends this record: group internal structure and name-permanence policy, both left open here, are settled there without contradicting this record.
 - [0014-registry-collision-detection](0014-registry-collision-detection.md) implements a required check against this record's resolution algorithm and harness registry.
+- [0015-import-harness-selection-flag](0015-import-harness-selection-flag.md) resolves this record's own deferred open item on manifest-level harness recording.
 - No known conflicting decision records.

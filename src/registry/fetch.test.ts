@@ -1,7 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { fetchRegistryFolder } from "./fetch.js";
+import { fetchRegistryFolder, registryFolderExists } from "./fetch.js";
 
 const server = setupServer();
 
@@ -101,6 +101,59 @@ describe("fetchRegistryFolder", () => {
     );
 
     const result = await fetchRegistryFolder("good-token", "hatch-usage");
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure result");
+    expect(result.reason).toBe("unreachable");
+  });
+});
+
+describe("registryFolderExists", () => {
+  it("reports true with a single, non-recursive call when the folder exists", async () => {
+    let callCount = 0;
+    server.use(
+      http.get(`${BASE}/hatch-usage-cld`, () => {
+        callCount++;
+        return HttpResponse.json([
+          { name: "SKILL.md", path: "hatch-usage-cld/SKILL.md", type: "file" },
+        ]);
+      }),
+    );
+
+    const result = await registryFolderExists("good-token", "hatch-usage-cld");
+    expect(result).toEqual({ ok: true, exists: true });
+    expect(callCount).toBe(1);
+  });
+
+  it("reports false when the folder doesn't exist", async () => {
+    server.use(
+      http.get(
+        `${BASE}/hatch-usage-cld`,
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+    );
+
+    const result = await registryFolderExists("good-token", "hatch-usage-cld");
+    expect(result).toEqual({ ok: true, exists: false });
+  });
+
+  it("reports unreachable on a network failure", async () => {
+    server.use(http.get(`${BASE}/hatch-usage-cld`, () => HttpResponse.error()));
+
+    const result = await registryFolderExists("good-token", "hatch-usage-cld");
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure result");
+    expect(result.reason).toBe("unreachable");
+  });
+
+  it("reports unreachable on an unexpected non-200/404 status", async () => {
+    server.use(
+      http.get(
+        `${BASE}/hatch-usage-cld`,
+        () => new HttpResponse(null, { status: 500 }),
+      ),
+    );
+
+    const result = await registryFolderExists("good-token", "hatch-usage-cld");
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure result");
     expect(result.reason).toBe("unreachable");

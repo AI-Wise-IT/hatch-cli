@@ -74,6 +74,49 @@ function decodeFile(entry: ContentsEntry): string {
   return Buffer.from(entry.content ?? "", encoding).toString("utf8");
 }
 
+export interface RegistryFolderExistsOk {
+  ok: true;
+  exists: boolean;
+}
+
+export interface RegistryFolderExistsFailure {
+  ok: false;
+  reason: "unreachable";
+  detail: string;
+}
+
+export type RegistryFolderExistsResult =
+  | RegistryFolderExistsOk
+  | RegistryFolderExistsFailure;
+
+// A single, non-recursive contents-API call checking whether a top-level
+// registry folder exists — used to resolve harness-suffixed vs. plain skill
+// folder names (see harness-registry.ts's resolveSkillFolderName) without
+// paying for a full recursive fetch just to find out.
+export async function registryFolderExists(
+  token: string,
+  folderName: string,
+): Promise<RegistryFolderExistsResult> {
+  const result = await getContents(token, folderName);
+
+  if (result.kind === "network-error") {
+    return {
+      ok: false,
+      reason: "unreachable",
+      detail: `could not reach the registry (${result.message})`,
+    };
+  }
+  if (result.kind === "unexpected-status") {
+    return {
+      ok: false,
+      reason: "unreachable",
+      detail: `the registry responded with an unexpected status (${result.status})`,
+    };
+  }
+
+  return { ok: true, exists: result.kind === "ok" };
+}
+
 // Fetches every file under `folderName` (recursing into subdirectories),
 // returning each file's content keyed by its path relative to that folder.
 export async function fetchRegistryFolder(

@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runImport } from "./commands/import.js";
 import { runLogin } from "./commands/login.js";
 import { runNew } from "./commands/new.js";
 
@@ -19,6 +20,8 @@ if (!command) {
   process.exitCode = await runLogin();
 } else if (command === "new") {
   process.exitCode = await runNew(rest);
+} else if (command === "import") {
+  process.exitCode = await runImport(rest);
 } else {
   console.error(`hatchcli: unknown command "${command}".`);
   process.exitCode = 1;
