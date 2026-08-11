@@ -16,3 +16,4 @@
 | 0012 | `0012-biome-formal-checks` | formal-checks | accepted | [`0012-biome-formal-checks.md`](0012-biome-formal-checks.md) |
 | 0013 | `0013-registry-group-structure-and-permanence` | skill-registry-group-structure | accepted | [`0013-registry-group-structure-and-permanence.md`](0013-registry-group-structure-and-permanence.md) |
 | 0014 | `0014-registry-collision-detection` | registry-collision-detection | accepted | [`0014-registry-collision-detection.md`](0014-registry-collision-detection.md) |
+| 0015 | `0015-import-harness-selection-flag` | manifest-bootstrap | accepted | [`0015-import-harness-selection-flag.md`](0015-import-harness-selection-flag.md) |

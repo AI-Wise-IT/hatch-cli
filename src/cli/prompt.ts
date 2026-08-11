@@ -6,6 +6,8 @@
 // verification), it just reads the first line, since there is no terminal
 // echo to suppress in that case.
 
+import { createInterface } from "node:readline/promises";
+
 const ENTER_CHARS = new Set(["\n", "\r"]);
 const BACKSPACE_CHARS = new Set([
   String.fromCharCode(127),
@@ -62,6 +64,20 @@ export function promptHidden(promptText: string): Promise<string> {
 
     stdin.on("data", onData);
   });
+}
+
+// A plain, echoed line prompt — unlike promptHidden, input is visible as
+// it's typed. Used for non-secret interactive choices (e.g. AF-6's
+// skip-or-suffix decision). Callers are responsible for checking
+// `stdin.isTTY` first; this will hang waiting for a line on a non-TTY/piped
+// stdin with no terminating newline.
+export async function promptLine(promptText: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return (await rl.question(promptText)).trim();
+  } finally {
+    rl.close();
+  }
 }
 
 function readLineFromPipe(): Promise<string> {
