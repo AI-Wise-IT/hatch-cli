@@ -64,13 +64,20 @@ Out of scope for this batch: the skill-content repo (a separate GitHub repo, not
 
 ## Batch 3 — Authenticate to the Registry
 
-**Status:** planned
+**Status:** done
 
-**Contents:** `hatch login` (UC-2): main flow (prompt for the registry's GitHub PAT, validate, persist per [0005-auth-token-env-file-precedence](architecture/decisions/0005-auth-token-env-file-precedence.md)) and AF-1 (invalid password).
+**Contents:** `hatch login` (UC-2): main flow (prompt for the registry's GitHub PAT, validate, persist per [0005-auth-token-env-file-precedence](architecture/decisions/0005-auth-token-env-file-precedence.md)) and AF-1 (invalid password). Token validation calls GitHub's `GET /user` — the lightest authenticated call available, proving the token is a live GitHub credential without requiring any scope or reaching the private skill-content repo itself (that repo-specific reachability check belongs to later batches' fetch logic, not login). The env-var-first, file-fallback credential resolution (`resolveToken()`) is exposed as a standalone, importable module (`src/auth/credentials.ts`) rather than buried in the login command, so later batches (bootstrap, import) can reuse it directly.
 
 **Rationale:** Nothing else in the CLI can be demoed without it — the PRD's own sequencing notes state login must ship before or alongside private-skill support. No dependency on any other remaining batch.
 
-**Verification:** Run `hatch login` with a valid token — confirm `~/.hatch/credentials.json` is written (restrictive permissions, outside any project's repo tree) and a later command doesn't re-prompt. Run it again with an invalid token — confirm it's rejected and no session is established. Set `HATCH_TOKEN` to a different valid token and confirm it takes precedence over the file.
+**Verification:** All of the following were directly observed, not inferred from code:
+- AF-1 (invalid token): ran the built CLI with a garbage token — rejected with `hatch login: invalid password (GitHub rejected the token as invalid or expired) — nothing was changed.`, exit code `1`, and confirmed `~/.hatch/credentials.json` was not created.
+- Main flow (valid token): the developer ran `hatch login` with a real, short-lived GitHub personal access token (revoked immediately after testing) — confirmed the success message printed, exit code `0`, and `~/.hatch/credentials.json` created with the expected `{ token }` shape.
+- `HATCH_TOKEN` precedence: with the file already populated from the step above, the developer set `HATCH_TOKEN` to a different value and confirmed `resolveToken()` returned the env var's value rather than the file's. This didn't need a second real GitHub token, since `resolveToken()` resolves the precedence without re-validating against GitHub — that validation only happens inside `hatch login` itself.
+- Backing automated coverage: unit tests for credential precedence, file persistence with restrictive permissions (skipped on Windows, where POSIX file-mode bits don't apply), and GitHub token validation via `msw`-mocked responses (200 / 401 / network-failure).
+
+**Notes — implementation detail discovered during this batch:**
+- Hit and fixed a native crash on Windows while wiring this up: calling `process.exit()` directly while an in-flight `fetch`/undici handle was still finalizing tripped a libuv assertion (`UV_HANDLE_CLOSING`, `src/win/async.c`). Fixed by using `process.exitCode` assignments instead of `process.exit()`, letting Node exit naturally once pending work settles — applies to the CLI entrypoint and the login prompt's Ctrl-C handling.
 
 ## Batch 4 — Bootstrap a New Project
 
