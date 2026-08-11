@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "bin": {
-    "hatchcli": "./dist/index.js"
+    "hatchcli": "dist/index.js"
   },
   "main": "./dist/index.js",
   "files": ["dist"],
