@@ -1,11 +1,14 @@
 {
-  "name": "hatchcli",
+  "name": "@ai-wise/hatchcli",
   "version": "0.0.0",
   "description": "Hatch CLI — import and manage AI coding-agent skills across projects",
   "type": "module",
   "license": "MIT",
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "bin": {
     "hatchcli": "dist/index.js"
