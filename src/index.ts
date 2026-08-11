@@ -1,10 +1,19 @@
 #!/usr/bin/env node
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
+const { version } = JSON.parse(
+  readFileSync(join(packageDir, "package.json"), "utf8"),
+);
+
 const [, , command] = process.argv;
 
 if (!command) {
   console.log(
-    "hatchcli 0.0.0 — infrastructure skeleton, no product commands implemented yet.",
+    `hatchcli ${version} — infrastructure skeleton, no product commands implemented yet.`,
   );
   process.exit(0);
 }
