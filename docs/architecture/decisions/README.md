@@ -8,3 +8,9 @@
 | 0004 | `0004-github-vcs-platform` | version-control | accepted | [`0004-github-vcs-platform.md`](0004-github-vcs-platform.md) |
 | 0005 | `0005-auth-token-env-file-precedence` | auth | accepted | [`0005-auth-token-env-file-precedence.md`](0005-auth-token-env-file-precedence.md) |
 | 0006 | `0006-npm-public-distribution` | cli-distribution | accepted | [`0006-npm-public-distribution.md`](0006-npm-public-distribution.md) |
+| 0007 | `0007-github-actions-deployment` | deployment | accepted | [`0007-github-actions-deployment.md`](0007-github-actions-deployment.md) |
+| 0008 | `0008-trunk-based-branch-protection` | branching-strategy | accepted | [`0008-trunk-based-branch-protection.md`](0008-trunk-based-branch-protection.md) |
+| 0009 | `0009-skill-versioning-semver-tags` | registry-versioning | accepted | [`0009-skill-versioning-semver-tags.md`](0009-skill-versioning-semver-tags.md) |
+| 0010 | `0010-manifest-schema-migrations` | data-migrations | accepted | [`0010-manifest-schema-migrations.md`](0010-manifest-schema-migrations.md) |
+| 0011 | `0011-vitest-testing` | testing | accepted | [`0011-vitest-testing.md`](0011-vitest-testing.md) |
+| 0012 | `0012-biome-formal-checks` | formal-checks | accepted | [`0012-biome-formal-checks.md`](0012-biome-formal-checks.md) |
