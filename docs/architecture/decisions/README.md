@@ -17,3 +17,5 @@
 | 0013 | `0013-registry-group-structure-and-permanence` | skill-registry-group-structure | accepted | [`0013-registry-group-structure-and-permanence.md`](0013-registry-group-structure-and-permanence.md) |
 | 0014 | `0014-registry-collision-detection` | registry-collision-detection | accepted | [`0014-registry-collision-detection.md`](0014-registry-collision-detection.md) |
 | 0015 | `0015-import-harness-selection-flag` | manifest-bootstrap | accepted | [`0015-import-harness-selection-flag.md`](0015-import-harness-selection-flag.md) |
+| 0016 | `0016-group-member-manifest-format` | skill-registry-group-structure | accepted | [`0016-group-member-manifest-format.md`](0016-group-member-manifest-format.md) |
+| 0017 | `0017-manifest-schema-v2-group-membership` | data-migrations | accepted | [`0017-manifest-schema-v2-group-membership.md`](0017-manifest-schema-v2-group-membership.md) |

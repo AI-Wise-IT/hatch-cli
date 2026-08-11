@@ -1,7 +1,11 @@
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { fetchRegistryFolder, registryFolderExists } from "./fetch.js";
+import {
+  fetchRegistryFile,
+  fetchRegistryFolder,
+  registryFolderExists,
+} from "./fetch.js";
 
 const server = setupServer();
 
@@ -104,6 +108,87 @@ describe("fetchRegistryFolder", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure result");
     expect(result.reason).toBe("unreachable");
+  });
+
+  it("resolves a pinned ref via ?ref=<name>@<version> (0009-skill-versioning-semver-tags)", async () => {
+    server.use(
+      http.get(`${BASE}/hatch-usage`, ({ request }) => {
+        const url = new URL(request.url);
+        expect(url.searchParams.get("ref")).toBe("hatch-usage@1.2.0");
+        return HttpResponse.json([
+          { name: "SKILL.md", path: "hatch-usage/SKILL.md", type: "file" },
+        ]);
+      }),
+      http.get(`${BASE}/hatch-usage/SKILL.md`, ({ request }) => {
+        const url = new URL(request.url);
+        expect(url.searchParams.get("ref")).toBe("hatch-usage@1.2.0");
+        return fileResponse("hatch-usage/SKILL.md", "# pinned");
+      }),
+    );
+
+    const result = await fetchRegistryFolder(
+      "good-token",
+      "hatch-usage",
+      "hatch-usage@1.2.0",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok result");
+    expect(result.files.get("SKILL.md")).toBe("# pinned");
+  });
+});
+
+describe("fetchRegistryFile", () => {
+  it("fetches a single file's content", async () => {
+    server.use(
+      http.get(`${BASE}/my-group/skill.json`, () =>
+        fileResponse("my-group/skill.json", '{"version":"1.0.0"}'),
+      ),
+    );
+
+    const result = await fetchRegistryFile("good-token", "my-group/skill.json");
+    expect(result).toEqual({ ok: true, content: '{"version":"1.0.0"}' });
+  });
+
+  it("reports not-found for a file that doesn't exist", async () => {
+    server.use(
+      http.get(
+        `${BASE}/missing/skill.json`,
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+    );
+
+    const result = await fetchRegistryFile("good-token", "missing/skill.json");
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure result");
+    expect(result.reason).toBe("not-found");
+  });
+
+  it("reports unreachable on a network failure", async () => {
+    server.use(
+      http.get(`${BASE}/my-group/skill.json`, () => HttpResponse.error()),
+    );
+
+    const result = await fetchRegistryFile("good-token", "my-group/skill.json");
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure result");
+    expect(result.reason).toBe("unreachable");
+  });
+
+  it("passes a pinned ref through as ?ref=", async () => {
+    server.use(
+      http.get(`${BASE}/foo/skill.json`, ({ request }) => {
+        const url = new URL(request.url);
+        expect(url.searchParams.get("ref")).toBe("foo@2.0.0");
+        return fileResponse("foo/skill.json", '{"version":"2.0.0"}');
+      }),
+    );
+
+    const result = await fetchRegistryFile(
+      "good-token",
+      "foo/skill.json",
+      "foo@2.0.0",
+    );
+    expect(result).toEqual({ ok: true, content: '{"version":"2.0.0"}' });
   });
 });
 
