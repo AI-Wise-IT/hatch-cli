@@ -32,7 +32,7 @@ This decision was confirmed in the architecture conversation alongside 0003 (reg
 
 ## Trade-offs Accepted
 
-- **Prompt coherence:** high — `npx hatch-cli` is a familiar idiom already used by countless dev tools, and a coding agent is already fluent with npm-ecosystem conventions.
+- **Prompt coherence:** high — `npx hatchcli` is a familiar idiom already used by countless dev tools, and a coding agent is already fluent with npm-ecosystem conventions.
 - **Failure surface:** depends on a system `git` binary and the `simple-git` wrapper being present; accepted because every dev sandbox in scope (local or cloud-agent) already has git installed.
 - **Reversibility:** high — a TypeScript CLI is not deeply architecturally locked in; rewriting in another language later is a well-trodden path if the constraint set changes.
 - **Operational simplicity:** `npm install -g` / `npx` requires zero provisioning locally or in an ephemeral cloud sandbox, at the cost of giving up the "single static binary, zero runtime dependency" property Go/Rust would offer — judged not worth the sandbox-egress risk it would introduce.

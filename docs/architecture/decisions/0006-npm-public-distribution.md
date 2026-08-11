@@ -10,7 +10,11 @@
 
 ## Decision
 
-Hatch CLI is published as a public package on the public npm registry (npmjs.org). The primary invocation is `npx hatch-cli@latest`, requiring no local installation step. `npm install -g hatch-cli` remains available as an optional convenience for frequent desktop use, not the primary path. Only the `latest` npm dist-tag is used in this MVP — no separate beta/pre-release channel.
+Hatch CLI is published as a public package on the public npm registry (npmjs.org), under the package name `hatchcli`. The primary invocation is `npx hatchcli@latest`, requiring no local installation step. `npm install -g hatchcli` remains available as an optional convenience for frequent desktop use, not the primary path. Only the `latest` npm dist-tag is used in this MVP — no separate beta/pre-release channel.
+
+### Package name correction (post-acceptance)
+
+The package name was originally recorded as `hatch-cli`. During `build-infrastructure-batch`'s first scaffolding pass, `npm view hatch-cli` showed that name already claimed by an unrelated, unaffiliated published package (v1.1.5) — it was never available. The developer was presented with available alternatives (`hatchctl`, `hatch-toolkit`, `use-hatch`, `hatchcli`) and chose `hatchcli`. Every other part of this decision — public registry, `latest`-only dist-tag, no private flag, no non-default registry, no embedded credentials — is unchanged. This is a correction to the same accepted decision, not a new proposal.
 
 ## Context
 
@@ -29,15 +33,18 @@ Hatch CLI is published as a public package on the public npm registry (npmjs.org
 
 ## Consequences
 
+- `package.json`'s `name` field must be `hatchcli` — not `hatch-cli`, which is an unrelated, unavailable package.
 - `package.json` must not set `"private": true` and must not configure `publishConfig.registry` to point anywhere other than the default public npm registry.
 - The CLI source and its published package must never embed the GitHub PAT, harness-registry contents, or any other registry credential — already required structurally by [0005-auth-token-env-file-precedence](0005-auth-token-env-file-precedence.md), restated here as an explicit publish-time expectation.
 - Release mechanics — how a new version actually gets published and what triggers it — are the subject of the Deployment/CI-CD cluster, not this record.
+- Any installation or invocation documentation must say `npx hatchcli@latest`, not `hatch-cli`.
 
 ## Agent Rules
 
-- MUST publish Hatch CLI as a public package to the default public npm registry.
+- MUST publish Hatch CLI as a public package named `hatchcli` to the default public npm registry.
 - MUST NOT set `"private": true` in `package.json` or configure a non-default private publish registry without superseding this record.
 - MUST NOT embed any registry credential, token, or private skill content in the published package.
+- MUST NOT revert the package name to `hatch-cli` — that name belongs to an unrelated, unaffiliated package and was never available.
 
 ## Machine Check
 
