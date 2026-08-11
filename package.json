@@ -1,0 +1,47 @@
+{
+  "name": "hatchcli",
+  "version": "0.0.0",
+  "description": "Hatch CLI — import and manage AI coding-agent skills across projects",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "hatchcli": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": ["dist"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AI-Wise-IT/hatch-cli.git"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build",
+    "prepare": "simple-git-hooks"
+  },
+  "dependencies": {
+    "simple-git": "^3.27.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "lint-staged": "^15.2.10",
+    "msw": "^2.6.6",
+    "simple-git-hooks": "^2.11.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.10"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx lint-staged && npm run typecheck"
+  },
+  "lint-staged": {
+    "*.{ts,js,json}": ["biome check --write"]
+  }
+}
