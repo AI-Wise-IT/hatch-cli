@@ -66,4 +66,5 @@ Expected result: tags of the form `<name>@<version>` exist in the registry repo 
 
 - Builds on [0001-harness-suffix-convention](0001-harness-suffix-convention.md) (per-folder shape) and [0003-registry-github-tarball-fetch](0003-registry-github-tarball-fetch.md) (ref-parameterized fetch mechanism this record extends).
 - Plugs into the required-status-check gate established by [0007-github-actions-deployment](0007-github-actions-deployment.md) and [0008-trunk-based-branch-protection](0008-trunk-based-branch-protection.md).
+- Referenced by [0013-registry-group-structure-and-permanence](0013-registry-group-structure-and-permanence.md), which reuses this record's MAJOR/MINOR-PATCH compatibility definition for pinned group-pointer version conflicts, and its `<name>@<version>` tag mechanism for pinning a pointer.
 - No known conflicting decision records.

@@ -75,4 +75,6 @@ Expected result: every path listed is a deliberate harness-specific variant, con
 ## Precedence
 
 - [0002-cli-runtime-nodejs](0002-cli-runtime-nodejs.md) resolves this record's harness-registry-location TODO — see updated Consequences above.
+- [0013-registry-group-structure-and-permanence](0013-registry-group-structure-and-permanence.md) extends this record: group internal structure and name-permanence policy, both left open here, are settled there without contradicting this record.
+- [0014-registry-collision-detection](0014-registry-collision-detection.md) implements a required check against this record's resolution algorithm and harness registry.
 - No known conflicting decision records.

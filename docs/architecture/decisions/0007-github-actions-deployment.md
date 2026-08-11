@@ -15,6 +15,10 @@ GitHub Actions is the CI/CD provider for both repos.
 - **Skill-content repo:** a workflow runs the UC-5 destination-path collision check on every push and PR. It requires no external credentials — it only ever reads the full local checkout CI already has.
 - **Hatch CLI repo:** a workflow runs the test suite and formal checks (exact commands settled by the forthcoming Testing + Formal checks cluster) on every push and PR. A separate release workflow triggers only on a pushed semver git tag (`v*`) and publishes the package to the public npm registry (per [0006-npm-public-distribution](0006-npm-public-distribution.md)) via **npm Trusted Publishing (OIDC)** — no npm token is stored as a GitHub secret.
 
+### Credential-scope addendum (post-acceptance)
+
+This record's "no external credentials" property for the skill-content repo's collision check still holds unchanged. It does not extend to the Hatch CLI repo's own CI: [0014-registry-collision-detection](0014-registry-collision-detection.md) adds a second, CLI-side check requiring a read-scoped GitHub credential for the private skill-content repo. This is an addendum, not a correction — nothing in this record's original decision was wrong; 0014 simply introduces a new CI job this record didn't anticipate.
+
 ### Publish authentication correction (post-acceptance)
 
 Originally recorded as an `NPM_TOKEN` GitHub Actions encrypted secret. Two problems surfaced while provisioning it during `build-infrastructure-batch`: `npm token create` (the classic-token CLI path) is now blocked by npm for accounts authenticated with a granular access token ("Granular access tokens that bypass two-factor authentication may not perform this action"), and even a working long-lived token is exactly the kind of standing credential npm's own Trusted Publishing feature (GA since July 2025) exists to eliminate. The developer chose to switch to Trusted Publishing instead.
@@ -68,4 +72,5 @@ Expected result: the release workflow file is found, and its trigger block refer
 
 - Builds on [0004-github-vcs-platform](0004-github-vcs-platform.md) and [0006-npm-public-distribution](0006-npm-public-distribution.md).
 - Enforced by [0008-trunk-based-branch-protection](0008-trunk-based-branch-protection.md).
+- Narrowed, for the Hatch CLI repo's CI only, by [0014-registry-collision-detection](0014-registry-collision-detection.md)'s new CLI-side credential requirement — see the addendum above.
 - No known conflicting decision records.
