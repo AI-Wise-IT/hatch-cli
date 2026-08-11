@@ -13,7 +13,15 @@
 GitHub Actions is the CI/CD provider for both repos.
 
 - **Skill-content repo:** a workflow runs the UC-5 destination-path collision check on every push and PR. It requires no external credentials — it only ever reads the full local checkout CI already has.
-- **Hatch CLI repo:** a workflow runs the test suite and formal checks (exact commands settled by the forthcoming Testing + Formal checks cluster) on every push and PR. A separate release workflow triggers only on a pushed semver git tag (`v*`) and publishes the package to the public npm registry (per [0006-npm-public-distribution](0006-npm-public-distribution.md)), authenticated with an `NPM_TOKEN` stored as a GitHub Actions encrypted repository secret.
+- **Hatch CLI repo:** a workflow runs the test suite and formal checks (exact commands settled by the forthcoming Testing + Formal checks cluster) on every push and PR. A separate release workflow triggers only on a pushed semver git tag (`v*`) and publishes the package to the public npm registry (per [0006-npm-public-distribution](0006-npm-public-distribution.md)) via **npm Trusted Publishing (OIDC)** — no npm token is stored as a GitHub secret.
+
+### Publish authentication correction (post-acceptance)
+
+Originally recorded as an `NPM_TOKEN` GitHub Actions encrypted secret. Two problems surfaced while provisioning it during `build-infrastructure-batch`: `npm token create` (the classic-token CLI path) is now blocked by npm for accounts authenticated with a granular access token ("Granular access tokens that bypass two-factor authentication may not perform this action"), and even a working long-lived token is exactly the kind of standing credential npm's own Trusted Publishing feature (GA since July 2025) exists to eliminate. The developer chose to switch to Trusted Publishing instead.
+
+Trusted Publishing uses OIDC: the release workflow requests a short-lived identity token from GitHub's OIDC provider (`permissions: id-token: write`), and npm exchanges it for a one-time publish credential after verifying it matches a Trusted Publisher relationship configured on the package's npmjs.com settings (GitHub org `AI-Wise-IT`, repo `hatch-cli`, workflow filename `release.yml`). No secret is stored in the repo at all. Requires npm CLI ≥11.5.1 and Node ≥22.14.0 in the workflow runner.
+
+One bootstrap constraint: npm requires a package to already exist before a Trusted Publisher can be configured for it (this stops name-squatting via OIDC before the real owner claims it). So the very first publish of a new package must happen manually, from the developer's own authenticated npm session (2FA one-time code required) — not from CI, and not scriptable by an agent. Every release after that first manual one goes through the workflow with zero stored credentials.
 
 ## Context
 
@@ -35,7 +43,8 @@ The developer's stated reasoning for wanting merges gated (see [0008-trunk-based
 
 ## Consequences
 
-- `NPM_TOKEN` must be stored as a GitHub Actions encrypted repository secret in the Hatch CLI repo, scoped to publish only.
+- The `hatchcli` npm package must have a Trusted Publisher configured on npmjs.com (org `AI-Wise-IT`, repo `hatch-cli`, workflow filename `release.yml`) before the release workflow can publish — this must be done once, manually, after the package's first (also manual) publish.
+- The release workflow needs `permissions: id-token: write` and a runner with npm ≥11.5.1 / Node ≥22.14.0; no `NPM_TOKEN` or other publish secret is stored in the repo.
 - The skill-content repo's collision-check workflow becomes a required status check under [0008-trunk-based-branch-protection](0008-trunk-based-branch-protection.md) — this record defines what the check does, that record defines how it blocks merges.
 - The Hatch CLI repo's test/formal-check workflow step is a placeholder pointing at whatever the Testing + Formal checks cluster settles — this record does not itself define those commands.
 
@@ -44,7 +53,8 @@ The developer's stated reasoning for wanting merges gated (see [0008-trunk-based
 - MUST implement CI/CD via GitHub Actions for both repos.
 - MUST trigger the Hatch CLI npm-publish workflow only on a pushed semver git tag (`v*`), never on every merge to `main`.
 - MUST NOT add third-party CI/CD vendor tooling without superseding this record.
-- MUST store the npm publish credential as a GitHub Actions encrypted secret, never committed to either repo.
+- MUST publish via npm Trusted Publishing (OIDC), with `id-token: write` granted to the release job.
+- MUST NOT store a long-lived npm token as a GitHub Actions secret for the publish step without superseding this record.
 
 ## Machine Check
 
