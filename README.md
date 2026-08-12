@@ -6,4 +6,5 @@ Hatch CLI — import and manage AI coding-agent skills across projects, from any
 npx @ai-wise/hatchcli@latest
 ```
 
-Status: infrastructure skeleton only. No product commands are implemented yet — see `docs/use-cases/` for what's coming and `docs/build-plan.md` for build sequencing.
+Status: `login`, `new`, `import`, `remove`, and `check-collisions` are implemented — see
+`docs/use-cases/` for behavior and `docs/build-plan.md` for build history.
