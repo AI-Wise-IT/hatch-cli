@@ -10,6 +10,7 @@
 // don't.
 
 import { fetchRegistryFile, fetchRegistryFolder } from "./fetch.js";
+import { REGISTRY_ONLY_FILES } from "./registry-only-files.js";
 
 export interface NestedMemberSpec {
   kind: "nested";
@@ -29,13 +30,18 @@ export interface GroupSkillJson {
   // Present (even if empty) only when the folder is a group; absent means
   // the folder is a plain skill.
   members?: MemberSpec[];
+  // 0019-registry-removed-metadata-flag.md: true when this folder's own
+  // skill.json flags it removed. Absent/false is the overwhelmingly common
+  // case — active, normal content.
+  removed?: boolean;
 }
 
 export interface ResolvedMember {
   name: string;
   version: string;
   // Path relative to the member's own root -> content. Never includes
-  // "skill.json" — that's registry metadata, not deployed content.
+  // registry-only files (skill.json, NOTE.md) — those are registry
+  // metadata/authoring content, never deployed.
   files: Map<string, string>;
 }
 
@@ -80,9 +86,10 @@ export function parseGroupSkillJson(
   }
   const obj = (parsed ?? {}) as Record<string, unknown>;
   const version = typeof obj.version === "string" ? obj.version : "0.0.0";
+  const removed = obj.removed === true ? true : undefined;
 
   if (obj.members === undefined) {
-    return { version };
+    return { version, removed };
   }
   if (!Array.isArray(obj.members)) {
     throw new GroupResolveError(
@@ -93,7 +100,7 @@ export function parseGroupSkillJson(
   const members = obj.members.map((entry, index) =>
     parseMemberSpec(entry, folderLabel, index),
   );
-  return { version, members };
+  return { version, members, removed };
 }
 
 function parseMemberSpec(
@@ -357,7 +364,9 @@ export async function resolveGroupMembers(
       chosen.version ??
       parseGroupSkillJson(fetchResult.files.get("skill.json"), name).version;
     const files = new Map(fetchResult.files);
-    files.delete("skill.json"); // registry metadata, not deployed content
+    for (const registryOnlyFile of REGISTRY_ONLY_FILES) {
+      files.delete(registryOnlyFile); // registry metadata/authoring content, never deployed
+    }
     resolved.set(name, { name, version, files });
   }
 

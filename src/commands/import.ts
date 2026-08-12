@@ -57,6 +57,7 @@ import {
   parseGroupSkillJson,
   resolveGroupMembers,
 } from "../registry/group-resolve.js";
+import { isRegistryOnlyFile } from "../registry/registry-only-files.js";
 import { isNewerCompatible } from "../registry/semver.js";
 
 interface ParsedArgs {
@@ -460,6 +461,19 @@ export async function runImport(argv: string[]): Promise<number> {
       return 1;
     }
 
+    // 0021-block-first-time-import-of-removed-target.md: a fresh (never
+    // before imported) standalone skill or group named directly on the
+    // command line is refused outright when it's flagged removed — distinct
+    // from AF-4's warn-only treatment of something already relied upon.
+    // Re-imports and a group member merely encountered during resolution
+    // are unaffected; both remain AF-4's existing warn-only path.
+    if (!existingEntry && meta.removed) {
+      console.error(
+        `hatch import: "${name}" is marked removed in the registry and cannot be imported for the first time — nothing was changed.`,
+      );
+      return 1;
+    }
+
     if (meta.members) {
       isGroup = true;
 
@@ -634,7 +648,7 @@ export async function runImport(argv: string[]): Promise<number> {
           name,
         );
         const relativePaths = [...primaryFiles.keys()].filter(
-          (p) => p !== "skill.json",
+          (p) => !isRegistryOnlyFile(p),
         );
         const onDiskHash = hashFromDisk(skillDir, relativePaths);
         if (onDiskHash !== existingEntry.contentHash) {
@@ -744,8 +758,8 @@ export async function runImport(argv: string[]): Promise<number> {
         );
 
         for (const [relativePath, content] of files) {
-          if (relativePath === "skill.json") {
-            continue; // registry metadata, not part of the deployed skill content
+          if (isRegistryOnlyFile(relativePath)) {
+            continue; // registry metadata/authoring content, never deployed
           }
           let destFile = join(skillDestDir, relativePath);
 
@@ -781,7 +795,8 @@ export async function runImport(argv: string[]): Promise<number> {
 
       // 0018-manifest-content-hash-local-edit-detection.md: hashed from the
       // primary declared harness's placed content only, excluding
-      // skill.json and anything that hit AF-6 skip/suffix handling above.
+      // registry-only files and anything that hit AF-6 skip/suffix handling
+      // above.
       const primaryFiles = target.filesByHarness.get(primaryHarness) as Map<
         string,
         string
@@ -790,7 +805,8 @@ export async function runImport(argv: string[]): Promise<number> {
         ...primaryFiles.entries(),
       ].filter(
         ([relativePath]) =>
-          relativePath !== "skill.json" && !excludedFromHash.has(relativePath),
+          !isRegistryOnlyFile(relativePath) &&
+          !excludedFromHash.has(relativePath),
       );
       contentHashes.set(target.name, hashEntries(entries));
     }

@@ -21,6 +21,7 @@ import { promptHidden } from "../cli/prompt.js";
 import { getHarnessDefinition, isKnownHarness } from "../harness-registry.js";
 import { migrateManifest } from "../manifest-migrations/index.js";
 import { fetchRegistryFolder } from "../registry/fetch.js";
+import { isRegistryOnlyFile } from "../registry/registry-only-files.js";
 
 const SELF_DOC_SKILL_NAME = "hatch-usage";
 
@@ -204,8 +205,8 @@ export async function runNew(argv: string[]): Promise<number> {
         SELF_DOC_SKILL_NAME,
       );
       for (const [relativePath, content] of fetchResult.files) {
-        if (relativePath === "skill.json") {
-          continue; // registry metadata, not part of the deployed skill content
+        if (isRegistryOnlyFile(relativePath)) {
+          continue; // registry metadata/authoring content, never deployed
         }
         const destFile = join(skillDestDir, relativePath);
         mkdirSync(dirname(destFile), { recursive: true });
