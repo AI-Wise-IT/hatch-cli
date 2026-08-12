@@ -43,6 +43,10 @@ Initially proposed without branch protection, reasoning that a solo project has 
 - MUST require the repo's applicable CI status check(s) from [0007-github-actions-deployment](0007-github-actions-deployment.md) to pass before a PR is eligible to merge.
 - MUST NOT require approving code review on `main`'s branch protection in this MVP.
 
+## Invariants
+
+None. Branch/PR/review process is internal engineering governance, invisible to any external consumer of either published artifact (the npm package or the registry content) — freely revisable at any time regardless of who depends on the outputs.
+
 ## Machine Check
 
 ```bash

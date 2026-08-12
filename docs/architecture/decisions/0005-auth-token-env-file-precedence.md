@@ -52,6 +52,10 @@ The developer confirmed directly, while this cluster was being settled, that Cla
 - MUST NOT implement a logout/session-invalidation command in this MVP.
 - MUST NOT introduce OS keychain integration without superseding this record.
 
+## Invariants
+
+- **MUST check the `HATCH_TOKEN` environment variable first, falling back to `~/.hatch/credentials.json`.** Becomes irreversible once: any real developer or CI pipeline has configured `HATCH_TOKEN`, or come to rely on the file fallback — renaming the variable or reordering precedence would silently break existing automated setups rather than failing loudly. Enforcement mechanism: none — an unenforced convention in the CLI's credential-resolution code. Current mode: not-yet-built.
+
 ## Machine Check
 
 ```bash

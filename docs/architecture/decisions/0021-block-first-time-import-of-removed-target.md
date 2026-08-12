@@ -53,6 +53,10 @@ The same review also raised whether a *group* with a removed *member* should blo
 - MUST NOT apply this block merely because a *member* of an otherwise-fine group is removed — that remains warn-only pending the registry-side dependency-detection mechanism logged as a backlog item.
 - MUST perform this check using the classify fetch `hatch import` already makes to determine group-vs-standalone — MUST NOT issue a separate fetch solely for this check.
 
+## Invariants
+
+- **MUST block (exit 1) a first-time import of a removed target.** Becomes irreversible-to-relax once: real automation depends on this exit-code contract — e.g. a script or CI pipeline that treats "import fails" as "this dependency is unavailable, stop here." Enforcement mechanism: the code path in `hatch import`, covered by automated tests asserting current behavior — nothing asserts this behavior stays stable release-over-release. Current mode: not-yet-built as a hardening-relevant mechanism; flagged for completeness rather than urgency, since no real automation exists yet to depend on it.
+
 ## Machine Check
 
 ```bash

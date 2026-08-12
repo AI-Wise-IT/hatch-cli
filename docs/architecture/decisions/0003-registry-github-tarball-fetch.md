@@ -44,6 +44,10 @@ Current practice for "pull one named subdirectory from a private repo into anoth
 - MUST NOT perform a full `git clone` of the skill-content registry repo.
 - MUST NOT persist fetched registry content on disk beyond the files placed into the target project by the current import operation.
 
+## Invariants
+
+- **The per-project manifest lives at `hatch.manifest.json` in the target project's root.** Becomes irreversible once: any real project has this file, and any tooling, scripts, or documentation outside Hatch itself comes to reference that path directly. Enforcement mechanism: none — no check currently verifies the filename or location hasn't drifted. Current mode: not-yet-built.
+
 ## Machine Check
 
 ```bash

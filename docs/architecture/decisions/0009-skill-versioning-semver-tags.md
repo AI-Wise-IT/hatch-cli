@@ -54,6 +54,11 @@ During this cluster's conversation, two retrieval approaches were directly compa
 - MUST push a `<name>@<version>` git tag at the merge commit, automatically in CI on merge to `main`, for every skill/group whose version changed in that merge.
 - MUST NOT introduce a separate hand-maintained version-to-commit index file.
 
+## Invariants
+
+- **MUST enforce, as a required CI status check, that any skill/group folder whose content changed also has a bumped `version`.** Becomes irreversible-to-relax once: any real project has imported a specific version and could re-import expecting semver-meaningful bumps to detect updates (AF-2) — silently allowing unbumped content changes would make an already-recorded version lie about what a project actually has installed. Enforcement mechanism: `hatch-skills`' CI `version-check` job (required status check). Current mode: blocking — correctly so from early in the build, since this protects registry integrity itself rather than a pre-launch cleanup window, and never needed a warn-only phase.
+- **MUST push a `<name>@<version>` git tag automatically on merge, for every skill/group whose version changed.** Becomes irreversible once: any pin — a standalone pin ([0020-standalone-version-pin-manifest-and-parsing](0020-standalone-version-pin-manifest-and-parsing.md)) or a group pointer's pin ([0013-registry-group-structure-and-permanence](0013-registry-group-structure-and-permanence.md)) — resolves via this tag. Removing or moving a tag would break any project or group pointer pinned to it. Enforcement mechanism: `hatch-skills`' CI `tag-versions` job. Current mode: blocking in effect — tags, once pushed, are treated as permanent by convention; no code currently prevents force-deleting one, but nothing in this project's own workflows does so.
+
 ## Machine Check
 
 ```bash

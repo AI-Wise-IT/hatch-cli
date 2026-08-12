@@ -52,6 +52,10 @@ Every other part of this decision — public registry, `latest`-only dist-tag, n
 - MUST NOT embed any registry credential, token, or private skill content in the published package.
 - MUST NOT revert the package name to `hatch-cli` or unscoped `hatchcli` — the former belongs to an unrelated package, the latter is blocked by npm's similarity check against it.
 
+## Invariants
+
+- **MUST NOT revert the package name from `@ai-wise/hatchcli`.** Becomes irreversible once: any real user has installed or scripted around `npx @ai-wise/hatchcli` — renaming breaks every existing invocation outright, and npm's own registry-immutability policy means an abandoned name/version can never be reclaimed if this one is ever unpublished. Enforcement mechanism: npm's own registry (external to this project) rejects re-publishing a version under a name it's already seen; internally, nothing in CI currently checks `package.json`'s `name` field before publish. Current mode: advisory at best — this record's own Machine Check is a manual grep, not a wired CI gate. Worth promoting to an actual CI check before real users depend on the name.
+
 ## Machine Check
 
 ```bash

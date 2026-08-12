@@ -74,6 +74,11 @@ UC-3 AF-4 ("deprecated or removed skill/group detected") already assumed "remove
 - MUST abort the entire `hatch import` operation — no placement, no manifest change, no commit — when a pinned-pointer version conflict spans different MAJOR versions, reporting the skill name and the conflicting versions.
 - MUST enforce name permanence in the skill-content repo's CI as a required status check, diffing each PR against `main`.
 
+## Invariants
+
+- **MUST NOT delete or rename a top-level registry folder once published.** Becomes irreversible once: a real project has imported (or could import) that name — deleting or renaming it would break any future re-import and retroactively invalidate [0014-registry-collision-detection](0014-registry-collision-detection.md)'s collision guarantee. Enforcement mechanism: `hatch-skills`' CI `name-permanence-check` job (required status check). Current mode: **advisory** (`NAME_PERMANENCE_ENFORCEMENT=warn`) as of 2026-08-12 (hatch-skills PR #15) — the check had been accidentally blocking since Batch 2, closing the pre-launch cleanup window before any real cutover was named; downgraded to warn-only on discovery so dev/test-fixture cleanup stays possible, per `docs/build-plan.md`. Move back to blocking at the actual pre-launch hardening cutover.
+- **MUST implement "removed" as a metadata flag, never a folder deletion.** Becomes irreversible once: the same trigger as above — this is the release valve that makes the permanence rule survivable (a mistaken or deprecated publish gets flagged, not deleted). Enforcement mechanism: the same `name-permanence-check` job — a `removed: true` folder that got deleted instead of flagged would itself be caught by that check. Current mode: advisory, same as above.
+
 ## Machine Check
 
 ```bash

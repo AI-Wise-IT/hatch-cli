@@ -14,7 +14,7 @@ Read before proposing anything:
 - `docs/build-plan.md` — must already exist with a Batch 1 entry marked `done`, written by `build-infrastructure-batch`. If it's missing, or Batch 1 isn't recorded as done, stop and point the developer at `build-infrastructure-batch` first. Deciding whether infrastructure comes first isn't a judgment call this skill makes — it's a precondition.
 - `docs/use-cases/*.md` — every confirmed in-scope use case (mvp-scoping's output).
 - `intake/mvp-scope.md`, specifically **"For the sequencing step"** — the dependency and timing notes carried forward from the PRD.
-- `docs/architecture/decisions/` and its `README.md` index — every accepted ADR, so a proposed batch never conflicts with a settled decision.
+- `docs/architecture/decisions/` and its `README.md` index — every accepted ADR, so a proposed batch never conflicts with a settled decision. Also check each record's `## Invariants` section, if present: any entry there means this build plan must end with a pre-launch hardening batch (see `references/batching-criteria.md`).
 - `references/batching-criteria.md` in this skill — the distilled rules this skill applies and the reasoning behind them. Read it before proposing anything; don't re-derive the criteria from scratch.
 
 If a use case is missing or unwritten, or an architecture decision affecting an in-scope use case is still `proposed` or absent, stop and point the developer at `mvp-scoping` or `write-architecture-decision` first. Do not sequence around a gap.
@@ -31,6 +31,10 @@ For every confirmed use case not covered by Batch 1:
 2. Group use cases that share dependency depth, a data model, or an implementation surface into the same batch — provided the group still ends in one coherent, demoable outcome. Never group use cases together for convenience alone.
 3. If a single use case is too large to review as one batch (many alternative flows, several unrelated business rules), split it across batches using the techniques in the reference doc — by workflow step, business rule variation, interface/path, or data variation. Never split a batch along architectural layers (UI vs. logic vs. data) — every batch must remain a vertical slice.
 4. For every candidate batch, write one entry: name, use cases/flows included, why they're sequenced here (the dependency or cohesion reason), and — critically — exactly how a human verifies it once built. "Tests pass" is not a verification method; a concrete action the developer takes and observes is.
+
+## Phase 2b — Add the pre-launch hardening batch, if any invariant exists
+
+If any accepted ADR carries an `## Invariants` entry, the last batch in the plan must be pre-launch hardening — this is a mechanical consequence of an invariant existing, not a judgment call, symmetric to how Batch 1 is always infrastructure. Propose it as the final batch: contents (run `pre-launch-audit`, resolve its findings, run `pre-launch-harden` against a developer-named cutover — or the project's own equivalent process if it hasn't adopted those skills), rationale (every other batch must exist first, since there's nothing real to harden against until the build is otherwise finished), and verification (the developer explicitly named a cutover, every invariant's real enforcement was observed to flip, every purge decision was individually confirmed — per `pre-launch-harden`'s own completion criteria). If no ADR carries an Invariants entry, skip this — don't manufacture a hardening batch for a project that has nothing to harden.
 
 ## Phase 3 — Confirm with the developer
 
@@ -56,4 +60,5 @@ Before treating this step as complete, verify:
 - [ ] Every confirmed use case — and, where split, every alternative flow — is assigned to exactly one batch: none unscheduled, none duplicated.
 - [ ] No batch depends on a batch sequenced after it.
 - [ ] Every batch has an explicit, concrete human-verification method.
+- [ ] If any accepted ADR carries an `## Invariants` entry, the plan ends with a pre-launch hardening batch; if none do, none was manufactured.
 - [ ] The developer explicitly confirmed the sequence before it was appended to `docs/build-plan.md`.

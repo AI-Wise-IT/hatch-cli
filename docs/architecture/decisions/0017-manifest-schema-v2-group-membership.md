@@ -52,6 +52,10 @@ Surfaced directly to the developer as a genuine open decision — whether to add
 - MUST record an imported group itself as its own top-level entry in `skills`, keyed by the group's name, with the group's own version, and no `group` field of its own.
 - MUST NOT backfill or guess a `group` value for any pre-existing v1 manifest entry during migration — the v1->v2 migration only bumps `schemaVersion`.
 
+## Invariants
+
+No new invariant beyond what [0010-manifest-schema-migrations](0010-manifest-schema-migrations.md) already establishes generally for every migration in the chain: this record's own migration function (keyed `1`) is covered by that general rule — it must never be removed or altered once any real project's manifest could be on schema v1.
+
 ## Machine Check
 
 ```bash
