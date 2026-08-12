@@ -17,6 +17,10 @@ One real implementation of the harness-resolution/collision-detection logic exis
 
 hatch-cli's CI is granted a read-scoped credential for the private hatch-skills repo, used only by this new check.
 
+### CLI-side check rationale correction (post-acceptance)
+
+This record's Context originally justified the CLI-side check as catching the harness-code-growth "shadowing" risk described there (a newly-reserved code silently reinterpreting an existing, coincidentally-suffixed skill name as a harness-variant of some other family). [0025-harness-shadowing-risk-accepted](0025-harness-shadowing-risk-accepted.md) settled that this risk is accepted, not detected — no static, single-snapshot check can catch it without false-positiving on legitimate family+variant pairs already in the registry. The CLI-side check's real, accurate value is verifying hatch-cli's own resolution/group-parsing logic (`check-collisions`, [0024-registry-collision-predicate](0024-registry-collision-predicate.md)) doesn't regress against the real, live hatch-skills tree — not detecting harness-code shadowing. This is a correction, not a new requirement: the check itself, and its credential, are unchanged.
+
 ## Context
 
 UC-5 (`docs/use-cases/prevent-path-collisions.md`) requires a CI check in hatch-skills that blocks a PR introducing a destination-path collision, running synchronously and before merge.
@@ -78,4 +82,5 @@ Expected result (first command run from the hatch-cli checkout, second from the 
 - Amends [0007-github-actions-deployment](0007-github-actions-deployment.md) for the hatch-cli side: that record's "no external credentials" property is narrowed by this record's new CLI-side credential requirement. [0007](0007-github-actions-deployment.md) has been updated to cross-reference this record.
 - Implements the required status check [UC-5](../../use-cases/prevent-path-collisions.md) specifies for the skill-content repo.
 - Extended by [0024-registry-collision-predicate](0024-registry-collision-predicate.md), which settles the concrete collision predicate this record's required checks evaluate (left undefined here).
+- Corrected by [0025-harness-shadowing-risk-accepted](0025-harness-shadowing-risk-accepted.md), which settles that the CLI-side check's originally-stated harness-code-shadowing rationale (above) is not what it actually detects — see the correction addendum above.
 - No known conflicting decision records.

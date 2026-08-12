@@ -3,10 +3,10 @@
 ## Metadata
 
 - **id:** backlog-0002-suffix-shadowing-lint
-- **status:** logged, not scoped, not built
+- **status:** rejected (won't-build) — see [0025-harness-shadowing-risk-accepted](../docs/architecture/decisions/0025-harness-shadowing-risk-accepted.md)
 - **decision_record:** `intake/backlog-0002-suffix-shadowing-lint.md`
 
-This is not a rescope record. Nothing here has been decided into or out of the MVP — it is a durable note that a real gap was raised and deliberately deferred, so a future scoping conversation starts from an accurate record instead of rediscovering it from scratch.
+**Resolution:** the developer explicitly declined to build this, or the related CLI-side before/after shadowing check, during the Batch 10 session — recorded as [0025-harness-shadowing-risk-accepted](../docs/architecture/decisions/0025-harness-shadowing-risk-accepted.md). This is now a deliberate accepted-risk decision, not open backlog awaiting future scoping. The record below is kept for its historical context (why the gap exists, what it would take to build).
 
 ## What was raised
 
