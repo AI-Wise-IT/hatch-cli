@@ -108,7 +108,7 @@ describe("runNew — main flow", () => {
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
     expect(manifest).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       harnesses: ["claude", "codex"],
       skills: { "hatch-usage": { version: "1.0.0" } },
     });

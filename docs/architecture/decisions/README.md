@@ -19,3 +19,6 @@
 | 0015 | `0015-import-harness-selection-flag` | manifest-bootstrap | accepted | [`0015-import-harness-selection-flag.md`](0015-import-harness-selection-flag.md) |
 | 0016 | `0016-group-member-manifest-format` | skill-registry-group-structure | accepted | [`0016-group-member-manifest-format.md`](0016-group-member-manifest-format.md) |
 | 0017 | `0017-manifest-schema-v2-group-membership` | data-migrations | accepted | [`0017-manifest-schema-v2-group-membership.md`](0017-manifest-schema-v2-group-membership.md) |
+| 0018 | `0018-manifest-content-hash-local-edit-detection` | data-migrations | accepted | [`0018-manifest-content-hash-local-edit-detection.md`](0018-manifest-content-hash-local-edit-detection.md) |
+| 0019 | `0019-registry-removed-metadata-flag` | skill-registry-group-structure | accepted | [`0019-registry-removed-metadata-flag.md`](0019-registry-removed-metadata-flag.md) |
+| 0020 | `0020-standalone-version-pin-manifest-and-parsing` | data-migrations | accepted | [`0020-standalone-version-pin-manifest-and-parsing.md`](0020-standalone-version-pin-manifest-and-parsing.md) |

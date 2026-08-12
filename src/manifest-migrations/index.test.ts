@@ -16,14 +16,27 @@ describe("migrateManifest", () => {
     );
   });
 
-  it("migrates a v1 manifest to v2 as a schema-only bump (0017-manifest-schema-v2-group-membership)", () => {
+  it("migrates a v1 manifest all the way to current as schema-only bumps (0017, 0018, 0020)", () => {
     const v1 = {
       schemaVersion: 1,
       harnesses: ["claude"],
       skills: { "hatch-usage": { version: "1.0.0" } },
     };
     expect(migrateManifest(v1)).toEqual({
+      schemaVersion: 3,
+      harnesses: ["claude"],
+      skills: { "hatch-usage": { version: "1.0.0" } },
+    });
+  });
+
+  it("migrates a v2 manifest to v3 as a schema-only bump, backfilling no contentHash/pin (0018, 0020)", () => {
+    const v2 = {
       schemaVersion: 2,
+      harnesses: ["claude"],
+      skills: { "hatch-usage": { version: "1.0.0" } },
+    };
+    expect(migrateManifest(v2)).toEqual({
+      schemaVersion: 3,
       harnesses: ["claude"],
       skills: { "hatch-usage": { version: "1.0.0" } },
     });

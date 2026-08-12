@@ -144,9 +144,11 @@ describe("runImport — main flow", () => {
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
     expect(manifest).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       harnesses: ["claude", "codex"],
-      skills: { "hatch-usage": { version: "1.0.0" } },
+      skills: {
+        "hatch-usage": { version: "1.0.0", contentHash: expect.any(String) },
+      },
     });
 
     const log = await simpleGit(target).log();
@@ -207,6 +209,7 @@ describe("runImport — main flow", () => {
     expect(fetchRegistryFolder).toHaveBeenCalledWith(
       "existing-session-token",
       "hatch-usage-cld",
+      undefined,
     );
     expect(
       readFileSync(
@@ -548,11 +551,19 @@ describe("runImport — group import (0013, 0016)", () => {
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
     expect(manifest).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       harnesses: ["claude"],
       skills: {
-        a: { version: "1.0.0", group: "my-group" },
-        b: { version: "1.0.0", group: "my-group" },
+        a: {
+          version: "1.0.0",
+          group: "my-group",
+          contentHash: expect.any(String),
+        },
+        b: {
+          version: "1.0.0",
+          group: "my-group",
+          contentHash: expect.any(String),
+        },
         "my-group": { version: "1.0.0" },
       },
     });
@@ -656,8 +667,16 @@ describe("runImport — group import (0013, 0016)", () => {
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
     expect(manifest.skills).toEqual({
-      "prd-elicitation": { version: "3.0.0", group: "combo-group" },
-      "inner-skill": { version: "2.0.0", group: "combo-group" },
+      "prd-elicitation": {
+        version: "3.0.0",
+        group: "combo-group",
+        contentHash: expect.any(String),
+      },
+      "inner-skill": {
+        version: "2.0.0",
+        group: "combo-group",
+        contentHash: expect.any(String),
+      },
       "combo-group": { version: "1.0.0" },
     });
     expect(fetchRegistryFolder).toHaveBeenCalledWith(
@@ -740,6 +759,7 @@ describe("runImport — AF-9: pinned-pointer version conflict within a group", (
     expect(manifest.skills.shared).toEqual({
       version: "1.5.0",
       group: "conflict-group",
+      contentHash: expect.any(String),
     });
   });
 
@@ -794,5 +814,410 @@ describe("runImport — AF-9: pinned-pointer version conflict within a group", (
     ).toBe(true);
     expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
     expect(existsSync(join(target, ".claude", "skills", "shared"))).toBe(false);
+  });
+});
+
+// Batch 7: re-import & staleness (AF-1..AF-4) + standalone version pinning
+// (AF-10..AF-12, rescope-0001-standalone-version-pinning.md).
+
+function mockStandaloneSkill(getVersion: () => string) {
+  vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+    if (path === "hatch-usage/skill.json") {
+      return { ok: true, content: plainSkillJson(getVersion()) };
+    }
+    return { ok: false, reason: "not-found", detail: "not found" };
+  });
+  vi.mocked(fetchRegistryFolder).mockImplementation(async () => ({
+    ok: true,
+    files: skillFiles(getVersion()),
+  }));
+}
+
+describe("runImport — AF-1: re-import already up to date", () => {
+  it("reports up to date, no changes, no commit", async () => {
+    mockStandaloneSkill(() => "1.0.0");
+    await runImport(["hatch-usage", "--path", target, "--harness", "claude"]);
+    const manifestBefore = readFileSync(
+      join(target, "hatch.manifest.json"),
+      "utf8",
+    );
+    const logBefore = await simpleGit(target).log();
+
+    consoleLogs.length = 0;
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs.some((m) => m.includes("already up to date"))).toBe(
+      true,
+    );
+    expect(readFileSync(join(target, "hatch.manifest.json"), "utf8")).toBe(
+      manifestBefore,
+    );
+    const logAfter = await simpleGit(target).log();
+    expect(logAfter.total).toBe(logBefore.total);
+  });
+});
+
+describe("runImport — AF-2: re-import, update available, no local edits", () => {
+  it("fetches and places the newer compatible version, updates the manifest, and commits with a version-bump message", async () => {
+    let version = "1.0.0";
+    mockStandaloneSkill(() => version);
+    await runImport(["hatch-usage", "--path", target, "--harness", "claude"]);
+    const logBefore = await simpleGit(target).log();
+
+    version = "1.1.0";
+    consoleLogs.length = 0;
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs.some((m) => m.includes("v1.0.0 → v1.1.0"))).toBe(true);
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills["hatch-usage"].version).toBe("1.1.0");
+    const logAfter = await simpleGit(target).log();
+    expect(logAfter.total).toBe(logBefore.total + 1);
+  });
+});
+
+describe("runImport — AF-3: re-import, local edits present", () => {
+  it("leaves locally-edited content untouched and reports local edits, even with a newer version available", async () => {
+    let version = "1.0.0";
+    mockStandaloneSkill(() => version);
+    await runImport(["hatch-usage", "--path", target, "--harness", "claude"]);
+    const skillFile = join(
+      target,
+      ".claude",
+      "skills",
+      "hatch-usage",
+      "SKILL.md",
+    );
+    writeFileSync(skillFile, "edited locally by the developer", "utf8");
+    const logBefore = await simpleGit(target).log();
+
+    version = "1.1.0";
+    consoleLogs.length = 0;
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs.some((m) => m.includes("local edits"))).toBe(true);
+    expect(readFileSync(skillFile, "utf8")).toBe(
+      "edited locally by the developer",
+    );
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills["hatch-usage"].version).toBe("1.0.0");
+    const logAfter = await simpleGit(target).log();
+    expect(logAfter.total).toBe(logBefore.total);
+  });
+});
+
+describe("runImport — AF-4: deprecated/removed skill detected", () => {
+  it("surfaces a removed-flag warning for a previously-imported skill without blocking this run's primary operation", async () => {
+    mockStandaloneSkill(() => "1.0.0");
+    await runImport(["hatch-usage", "--path", target, "--harness", "claude"]);
+
+    vi.mocked(registryFolderExists).mockImplementation(
+      async (_token, folderName) => ({
+        ok: true,
+        exists: folderName === "hatch-usage" || folderName === "other-skill",
+      }),
+    );
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "hatch-usage/skill.json") {
+        return {
+          ok: true,
+          content: JSON.stringify({ version: "1.0.0", removed: true }),
+        };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(
+      async (_token, folderName) => {
+        if (folderName === "other-skill") {
+          return { ok: true, files: skillFiles("1.0.0") };
+        }
+        throw new Error(`unexpected fetch of ${folderName}`);
+      },
+    );
+
+    consoleLogs.length = 0;
+    const exitCode = await runImport([
+      "other-skill",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      consoleLogs.some(
+        (m) => m.includes("hatch-usage") && m.includes("removed"),
+      ),
+    ).toBe(true);
+    expect(
+      existsSync(join(target, ".claude", "skills", "other-skill", "SKILL.md")),
+    ).toBe(true);
+  });
+});
+
+describe("runImport — AF-10/AF-11/AF-12: standalone version pinning", () => {
+  it("AF-11: fetches exactly the pinned version regardless of what's newer, and records the pin", async () => {
+    vi.mocked(fetchRegistryFile).mockImplementation(
+      async (_token, path, ref) => {
+        if (path === "hatch-usage/skill.json") {
+          return {
+            ok: true,
+            content: plainSkillJson(
+              ref === "hatch-usage@1.0.0" ? "1.0.0" : "2.0.0",
+            ),
+          };
+        }
+        return { ok: false, reason: "not-found", detail: "not found" };
+      },
+    );
+    vi.mocked(fetchRegistryFolder).mockImplementation(
+      async (_token, _folderName, ref) => {
+        expect(ref).toBe("hatch-usage@1.0.0");
+        return { ok: true, files: skillFiles("1.0.0") };
+      },
+    );
+
+    const exitCode = await runImport([
+      "hatch-usage@1.0.0",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+
+    expect(exitCode).toBe(0);
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills["hatch-usage"]).toEqual({
+      version: "1.0.0",
+      contentHash: expect.any(String),
+      pin: { type: "exact", value: "1.0.0" },
+    });
+  });
+
+  it("AF-10: a bare re-import of a standing exact pin skips the update check entirely and leaves it untouched", async () => {
+    mockStandaloneSkill(() => "1.0.0");
+    await runImport([
+      "hatch-usage@1.0.0",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+    const manifestBefore = readFileSync(
+      join(target, "hatch.manifest.json"),
+      "utf8",
+    );
+    const logBefore = await simpleGit(target).log();
+
+    vi.mocked(fetchRegistryFolder).mockClear();
+    consoleLogs.length = 0;
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      consoleLogs.some((m) => m.includes("pinned") && m.includes("1.0.0")),
+    ).toBe(true);
+    expect(readFileSync(join(target, "hatch.manifest.json"), "utf8")).toBe(
+      manifestBefore,
+    );
+    const logAfter = await simpleGit(target).log();
+    expect(logAfter.total).toBe(logBefore.total);
+    expect(fetchRegistryFolder).not.toHaveBeenCalled();
+  });
+
+  it("AF-12: records a range pin for visibility, but a later bare re-import still auto-updates normally", async () => {
+    let version = "1.0.0";
+    mockStandaloneSkill(() => version);
+
+    let exitCode = await runImport([
+      "hatch-usage@^1.0.0",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+    expect(exitCode).toBe(0);
+    let manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills["hatch-usage"].pin).toEqual({
+      type: "range",
+      value: "1.0.0",
+    });
+
+    version = "1.1.0";
+    consoleLogs.length = 0;
+    exitCode = await runImport(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs.some((m) => m.includes("v1.0.0 → v1.1.0"))).toBe(true);
+    manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills["hatch-usage"].version).toBe("1.1.0");
+    expect(manifest.skills["hatch-usage"].pin).toEqual({
+      type: "range",
+      value: "1.0.0",
+    });
+  });
+
+  it("clears a standing exact pin via @latest, and a later bare re-import keeps auto-updating", async () => {
+    let version = "1.0.0";
+    mockStandaloneSkill(() => version);
+
+    await runImport([
+      "hatch-usage@1.0.0",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+
+    version = "1.1.0";
+    let exitCode = await runImport(["hatch-usage@latest", "--path", target]);
+    expect(exitCode).toBe(0);
+    let manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills["hatch-usage"].pin).toBeUndefined();
+    expect(manifest.skills["hatch-usage"].version).toBe("1.1.0");
+
+    version = "1.2.0";
+    exitCode = await runImport(["hatch-usage", "--path", target]);
+    expect(exitCode).toBe(0);
+    manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills["hatch-usage"].version).toBe("1.2.0");
+  });
+});
+
+describe("runImport — Batch 7: group re-import", () => {
+  it("re-resolves the member graph on a group version bump and updates members, one commit", async () => {
+    let groupVersion = "1.0.0";
+    let memberVersion = "1.0.0";
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "my-group/skill.json") {
+        return {
+          ok: true,
+          content: groupSkillJson(groupVersion, [
+            { kind: "nested", name: "a" },
+          ]),
+        };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(
+      async (_token, folderName) => {
+        if (folderName === "my-group") {
+          return {
+            ok: true,
+            files: new Map([
+              [
+                "skill.json",
+                groupSkillJson(groupVersion, [{ kind: "nested", name: "a" }]),
+              ],
+              ["a/SKILL.md", `# A v${memberVersion}`],
+            ]),
+          };
+        }
+        throw new Error(`unexpected fetch of ${folderName}`);
+      },
+    );
+
+    await runImport(["my-group", "--path", target, "--harness", "claude"]);
+    const logBefore = await simpleGit(target).log();
+
+    groupVersion = "1.1.0";
+    memberVersion = "1.1.0";
+    const exitCode = await runImport(["my-group", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(join(target, ".claude", "skills", "a", "SKILL.md"), "utf8"),
+    ).toBe("# A v1.1.0");
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills["my-group"].version).toBe("1.1.0");
+    expect(manifest.skills.a.version).toBe("1.1.0");
+    expect(manifest.skills.a.contentHash).toEqual(expect.any(String));
+    const logAfter = await simpleGit(target).log();
+    expect(logAfter.total).toBe(logBefore.total + 1);
+  });
+
+  it("skips a locally-edited member while still updating the group's own recorded version and other members", async () => {
+    let groupVersion = "1.0.0";
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "my-group/skill.json") {
+        return {
+          ok: true,
+          content: groupSkillJson(groupVersion, [
+            { kind: "nested", name: "a" },
+            { kind: "nested", name: "b" },
+          ]),
+        };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(
+      async (_token, folderName) => {
+        if (folderName === "my-group") {
+          return {
+            ok: true,
+            files: new Map([
+              [
+                "skill.json",
+                groupSkillJson(groupVersion, [
+                  { kind: "nested", name: "a" },
+                  { kind: "nested", name: "b" },
+                ]),
+              ],
+              ["a/SKILL.md", `# A ${groupVersion}`],
+              ["b/SKILL.md", `# B ${groupVersion}`],
+            ]),
+          };
+        }
+        throw new Error(`unexpected fetch of ${folderName}`);
+      },
+    );
+
+    await runImport(["my-group", "--path", target, "--harness", "claude"]);
+    writeFileSync(
+      join(target, ".claude", "skills", "a", "SKILL.md"),
+      "edited locally",
+      "utf8",
+    );
+
+    groupVersion = "1.1.0";
+    consoleLogs.length = 0;
+    const exitCode = await runImport(["my-group", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(join(target, ".claude", "skills", "a", "SKILL.md"), "utf8"),
+    ).toBe("edited locally");
+    expect(
+      readFileSync(join(target, ".claude", "skills", "b", "SKILL.md"), "utf8"),
+    ).toBe("# B 1.1.0");
+    expect(
+      consoleLogs.some((m) => m.includes("a") && m.includes("local edits")),
+    ).toBe(true);
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills["my-group"].version).toBe("1.1.0");
+    expect(manifest.skills.a.version).toBe("1.0.0"); // untouched
+    expect(manifest.skills.b.version).toBe("1.1.0"); // updated
   });
 });
