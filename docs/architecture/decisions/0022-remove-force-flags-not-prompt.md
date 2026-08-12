@@ -75,4 +75,5 @@ Expected result: no output — `src/commands/remove.ts` contains no reference to
 - Builds on [0018-manifest-content-hash-local-edit-detection](0018-manifest-content-hash-local-edit-detection.md) — reuses its `contentHash`/`hashFromDisk` mechanism unchanged as the dirtiness check; does not alter that record's own scope (`hatch import`'s re-import logic).
 - Complements [0021-block-first-time-import-of-removed-target](0021-block-first-time-import-of-removed-target.md) and [0013-registry-group-structure-and-permanence](0013-registry-group-structure-and-permanence.md) in continuing this project's pattern of resolving a genuine UC-level gap via a targeted ADR rather than an inline guess.
 - Does not affect `hatch import`'s AF-6 interactive prompt (`src/cli/prompt.ts`'s `promptLine`, established in Batch 5) — that mechanism is unchanged and out of this record's scope.
+- [0023-remove-harness-drop-unconditional](0023-remove-harness-drop-unconditional.md) makes explicit that this record's force-flag mechanism does not extend to `hatch remove --harness` (AF-5) — that path is unconditional, with no drift/local-edit gating.
 - No known conflicting decision records.

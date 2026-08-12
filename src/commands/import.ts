@@ -9,13 +9,18 @@
 // Batch 5/6 scope: UC-3 main flow (standalone, group), AF-6 (destination
 // occupied), AF-7 (registry unreachable), AF-8 (invalid password), AF-9
 // (pinned-pointer version conflict, group-only).
-// Batch 7 scope (this batch): re-import/staleness — AF-1 (already up to
-// date), AF-2 (update available), AF-3 (local edits present), AF-4
-// (deprecated/removed detection, every invocation, every previously-
-// imported name) — plus standalone version pinning folded in via
-// rescope-0001: AF-10 (bare re-import respects a standing exact pin),
-// AF-11 (`<name>@<version>` exact pin), AF-12 (`<name>@^<version>` range
-// pin). --add-harness (AF-5) is Batch 9.
+// Batch 7 scope: re-import/staleness — AF-1 (already up to date), AF-2
+// (update available), AF-3 (local edits present), AF-4 (deprecated/removed
+// detection, every invocation, every previously-imported name) — plus
+// standalone version pinning folded in via rescope-0001: AF-10 (bare
+// re-import respects a standing exact pin), AF-11 (`<name>@<version>` exact
+// pin), AF-12 (`<name>@^<version>` range pin).
+// Batch 9 scope (this batch): AF-5, `--add-harness <name>` — backfills
+// every already-imported skill/group's content into a newly-added harness,
+// re-resolving each standalone skill's harness-suffix variant fresh for the
+// new harness (0001-harness-suffix-convention.md) and re-unpacking each
+// group fresh at its currently-recorded version, all at the version already
+// recorded in the manifest — never triggering an update.
 
 import {
   existsSync,
@@ -61,10 +66,12 @@ import { isRegistryOnlyFile } from "../registry/registry-only-files.js";
 import { isNewerCompatible } from "../registry/semver.js";
 
 interface ParsedArgs {
-  targetName: string;
+  // Exactly one of targetName/addHarness is set — parseArgs enforces this.
+  targetName: string | undefined;
   spec: PinSpec;
   targetPath: string;
   harnessArg: string | undefined;
+  addHarness: string | undefined;
 }
 
 interface ConflictOutcome {
@@ -114,6 +121,7 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   const positional: string[] = [];
   let targetPath = process.cwd();
   let harnessArg: string | undefined;
+  let addHarness: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -129,11 +137,42 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
         return { error: "--harness requires a value" };
       }
       harnessArg = value;
+    } else if (arg === "--add-harness") {
+      const value = argv[++i];
+      if (value === undefined) {
+        return { error: "--add-harness requires a value" };
+      }
+      addHarness = value;
     } else if (arg.startsWith("--")) {
       return { error: `unrecognized option "${arg}"` };
     } else {
       positional.push(arg);
     }
+  }
+
+  // AF-5 (backfill a new harness): --add-harness takes no skill/group name
+  // and no --harness (that flag seeds a manifest-less project's *initial*
+  // harness set, per 0015-import-harness-selection-flag.md — a distinct
+  // operation from adding one more harness to a project that already has a
+  // manifest).
+  if (addHarness !== undefined) {
+    if (positional.length > 0) {
+      return {
+        error: `"--add-harness" cannot be combined with a skill/group name ("${positional[0]}")`,
+      };
+    }
+    if (harnessArg !== undefined) {
+      return {
+        error: '"--add-harness" cannot be combined with "--harness"',
+      };
+    }
+    return {
+      targetName: undefined,
+      spec: { kind: "none" },
+      targetPath: resolve(targetPath),
+      harnessArg: undefined,
+      addHarness,
+    };
   }
 
   if (positional.length === 0) {
@@ -153,6 +192,7 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     spec,
     targetPath: resolve(targetPath),
     harnessArg,
+    addHarness: undefined,
   };
 }
 
@@ -264,19 +304,58 @@ async function checkRemovedFlags(
   return warnings;
 }
 
+// UC-3 step 3, factored out for reuse by --add-harness (AF-5): resolve an
+// already-persisted session, or prompt and validate a new one. Returns
+// either the resolved token or a reportable error string (unprefixed —
+// callers prepend their own "hatch import: ... — nothing was changed.").
+async function authenticate(): Promise<{ token: string } | { error: string }> {
+  const existing = resolveToken();
+  if (existing) {
+    return { token: existing };
+  }
+
+  const candidate = (
+    await promptHidden("Registry personal access token: ")
+  ).trim();
+  if (!candidate) {
+    return { error: "no token provided" };
+  }
+
+  const validation = await validateGitHubToken(candidate);
+  if (!validation.valid) {
+    return {
+      error: isNetworkFailure(validation.reason)
+        ? `registry unreachable (${validation.reason})`
+        : `invalid password (${validation.reason})`,
+    };
+  }
+
+  writeCredentials(candidate);
+  return { token: candidate };
+}
+
 export async function runImport(argv: string[]): Promise<number> {
   const parsed = parseArgs(argv);
   if ("error" in parsed) {
     console.error(`hatch import: ${parsed.error} — nothing was changed.`);
     return 1;
   }
-  const { targetName: name, spec, targetPath, harnessArg } = parsed;
+  const { targetName: name, spec, targetPath, harnessArg, addHarness } = parsed;
 
   if (!existsSync(targetPath)) {
     console.error(
       `hatch import: target project "${targetPath}" does not exist — nothing was changed.`,
     );
     return 1;
+  }
+
+  if (addHarness !== undefined) {
+    return runAddHarness(addHarness, targetPath);
+  }
+  if (name === undefined) {
+    // Unreachable: parseArgs guarantees targetName is set whenever
+    // addHarness isn't — narrows the type for every use of `name` below.
+    throw new Error("unreachable: missing skill/group name");
   }
 
   // Manifest bootstrap (0015-import-harness-selection-flag.md): a project
@@ -361,33 +440,12 @@ export async function runImport(argv: string[]): Promise<number> {
   }
 
   // UC-3 step 3: authenticate if no session already resolves.
-  let token = resolveToken();
-  if (!token) {
-    const candidate = (
-      await promptHidden("Registry personal access token: ")
-    ).trim();
-    if (!candidate) {
-      console.error("hatch import: no token provided — nothing was changed.");
-      return 1;
-    }
-
-    const validation = await validateGitHubToken(candidate);
-    if (!validation.valid) {
-      if (isNetworkFailure(validation.reason)) {
-        console.error(
-          `hatch import: registry unreachable (${validation.reason}) — nothing was changed.`,
-        );
-      } else {
-        console.error(
-          `hatch import: invalid password (${validation.reason}) — nothing was changed.`,
-        );
-      }
-      return 1;
-    }
-
-    writeCredentials(candidate);
-    token = candidate;
+  const authResult = await authenticate();
+  if ("error" in authResult) {
+    console.error(`hatch import: ${authResult.error} — nothing was changed.`);
+    return 1;
   }
+  const token = authResult.token;
 
   // AF-4: deprecation/removal check across every previously-imported name,
   // independent of this run's primary target — surfaced regardless of the
@@ -568,7 +626,7 @@ export async function runImport(argv: string[]): Promise<number> {
         const folderName = await resolveSkillFolderName(
           name,
           harness,
-          (candidate) => checkFolderExists(token as string, candidate),
+          (candidate) => checkFolderExists(token, candidate),
         );
         if (!folderName) {
           console.error(
@@ -926,4 +984,334 @@ export async function runImport(argv: string[]): Promise<number> {
   }
 
   return 0;
+}
+
+// AF-5: validates the harness code, adds it to the manifest, and backfills
+// every already-imported skill/group's content into its folder — always at
+// the version already recorded in the manifest, never "latest", so backfill
+// can never itself trigger an update. A standalone skill re-resolves its
+// harness-suffix variant fresh for the new harness
+// (0001-harness-suffix-convention.md: the new harness may prefer a
+// differently-suffixed sibling, or no suffixed sibling at all, than any
+// harness already declared). A group is re-unpacked fresh via
+// resolveGroupMembers (0013, 0016) at its own recorded version — the same
+// mechanism a normal import already uses, since a group member's pointer
+// resolution is defined to run fresh on every unpack, never a persisted
+// commitment (0016).
+async function runAddHarness(
+  harnessName: string,
+  targetPath: string,
+): Promise<number> {
+  const manifestPath = join(targetPath, "hatch.manifest.json");
+  if (!existsSync(manifestPath)) {
+    console.error(
+      "hatch import: no hatch.manifest.json found in this project — run `hatch import --harness <name>` first — nothing was changed.",
+    );
+    return 1;
+  }
+
+  const originalManifestRaw = readFileSync(manifestPath, "utf8");
+  const existingManifest = migrateManifest(JSON.parse(originalManifestRaw));
+
+  const recorded = existingManifest.harnesses;
+  if (
+    !Array.isArray(recorded) ||
+    recorded.length === 0 ||
+    !recorded.every((h) => typeof h === "string")
+  ) {
+    console.error(
+      `hatch import: "${manifestPath}" has no valid harnesses recorded — nothing was changed.`,
+    );
+    return 1;
+  }
+  const existingHarnesses = recorded as string[];
+
+  if (!isKnownHarness(harnessName)) {
+    console.error(
+      `hatch import: unrecognized harness "${harnessName}" — nothing was changed.`,
+    );
+    return 1;
+  }
+  if (existingHarnesses.includes(harnessName)) {
+    console.log(
+      `hatch import: harness "${harnessName}" is already added to this project — nothing to do.`,
+    );
+    return 0;
+  }
+
+  const existingSkills: Record<string, SkillEntry> =
+    existingManifest.skills && typeof existingManifest.skills === "object"
+      ? (existingManifest.skills as Record<string, SkillEntry>)
+      : {};
+
+  // UC-3 step 2: auto-init git if the target somehow isn't a repo yet — a
+  // project with an existing manifest almost always already is one, but
+  // this mirrors the main flow's own defensive handling rather than assume.
+  const git = simpleGit(targetPath);
+  try {
+    const isRepo = await git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
+    if (!isRepo) {
+      await git.init();
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `hatch import: failed to initialize git (${message}) — nothing was changed.`,
+    );
+    return 1;
+  }
+
+  // UC-3 step 3: authenticate if no session already resolves.
+  const authResult = await authenticate();
+  if ("error" in authResult) {
+    console.error(`hatch import: ${authResult.error} — nothing was changed.`);
+    return 1;
+  }
+  const token = authResult.token;
+
+  // AF-4: same deprecation/removal check every invocation performs,
+  // independent of this run's primary operation.
+  const removedWarnings = await checkRemovedFlags(
+    token,
+    Object.keys(existingSkills),
+  );
+  for (const warning of removedWarnings) {
+    console.log(`hatch import: warning: ${warning}`);
+  }
+
+  // A group's own top-level entry has no folder of its own on disk — only
+  // its members (entries whose `group` field names it) are placed, exactly
+  // as a normal import unpacks a group flat (0013). Distinguishing a
+  // standalone skill's own entry from a group's own bookkeeping entry uses
+  // the same "does anything else point its group field at this name" test
+  // remove.ts uses for the equivalent problem.
+  const groupNames = new Set(
+    Object.values(existingSkills)
+      .map((entry) => entry?.group)
+      .filter((g): g is string => g !== undefined),
+  );
+  const standaloneNames = Object.keys(existingSkills).filter(
+    (skillName) =>
+      existingSkills[skillName]?.group === undefined &&
+      !groupNames.has(skillName),
+  );
+  const groupTargetNames = [...groupNames];
+
+  // Phase 1: resolve and fetch everything needed, without writing anything
+  // to disk yet — any failure here still leaves "nothing changed".
+  const backfillFiles = new Map<string, Map<string, string>>();
+  try {
+    for (const skillName of standaloneNames) {
+      const entry = existingSkills[skillName] as SkillEntry;
+      const folderName = await resolveSkillFolderName(
+        skillName,
+        harnessName,
+        (candidate) => checkFolderExists(token, candidate),
+      );
+      if (!folderName) {
+        console.error(
+          `hatch import: "${skillName}" was not found in the registry for harness "${harnessName}" — nothing was changed.`,
+        );
+        return 1;
+      }
+      const fetchRef = `${skillName}@${entry.version}`;
+      const result = await fetchRegistryFolder(token, folderName, fetchRef);
+      if (!result.ok) {
+        console.error(
+          `hatch import: ${fetchFailureMessage(result)} — nothing was changed.`,
+        );
+        return 1;
+      }
+      backfillFiles.set(skillName, result.files);
+    }
+
+    for (const groupName of groupTargetNames) {
+      const groupEntry = existingSkills[groupName] as SkillEntry;
+      const fetchRef = `${groupName}@${groupEntry.version}`;
+      const rootFolderFetch = await fetchRegistryFolder(
+        token,
+        groupName,
+        fetchRef,
+      );
+      if (!rootFolderFetch.ok) {
+        console.error(
+          `hatch import: ${fetchFailureMessage(rootFolderFetch)} — nothing was changed.`,
+        );
+        return 1;
+      }
+      const meta = parseGroupSkillJson(
+        rootFolderFetch.files.get("skill.json"),
+        groupName,
+      );
+      if (!meta.members) {
+        console.error(
+          `hatch import: "${groupName}" is recorded as a group but its registry entry at v${groupEntry.version} no longer has members — nothing was changed.`,
+        );
+        return 1;
+      }
+      const resolveResult = await resolveGroupMembers(
+        token,
+        groupName,
+        meta.version,
+        meta.members,
+        rootFolderFetch.files,
+      );
+      if (!resolveResult.ok) {
+        console.error(
+          `hatch import: ${fetchFailureMessage(resolveResult)} — nothing was changed.`,
+        );
+        return 1;
+      }
+      const resolvedByName = new Map(
+        resolveResult.members.map((member) => [member.name, member]),
+      );
+      const recordedMemberNames = Object.keys(existingSkills).filter(
+        (skillName) => existingSkills[skillName]?.group === groupName,
+      );
+      for (const memberName of recordedMemberNames) {
+        const member = resolvedByName.get(memberName);
+        if (!member) {
+          console.error(
+            `hatch import: "${memberName}" (a member of group "${groupName}") could not be re-resolved at v${groupEntry.version} — nothing was changed.`,
+          );
+          return 1;
+        }
+        backfillFiles.set(memberName, member.files);
+      }
+    }
+  } catch (error) {
+    if (error instanceof RegistryUnreachableError) {
+      console.error(
+        `hatch import: registry unreachable (${error.message}) — nothing was changed.`,
+      );
+      return 1;
+    }
+    throw error;
+  }
+
+  // Phase 2: place everything, update the manifest, commit once — rolled
+  // back entirely on any failure from here on. Every destination under the
+  // new harness folder is, by definition, a first-time placement for that
+  // harness (it was never declared before this run) — so AF-6's
+  // destination-occupied handling applies uniformly here, unlike the main
+  // flow's update path, which skips it for content already known Hatch-placed.
+  const interactive = Boolean(process.stdin.isTTY);
+  const conflictOutcomes: ConflictOutcome[] = [];
+  const writtenFiles: string[] = [];
+  const excludedFromHashByItem = new Map<string, Set<string>>();
+  try {
+    const definition = getHarnessDefinition(harnessName);
+    const placedNames: string[] = [];
+    for (const [itemName, files] of backfillFiles) {
+      const skillDestDir = join(targetPath, definition.skillsDir, itemName);
+      const excludedFromHash = new Set<string>();
+
+      for (const [relativePath, content] of files) {
+        if (isRegistryOnlyFile(relativePath)) {
+          continue; // registry metadata/authoring content, never deployed
+        }
+        let destFile = join(skillDestDir, relativePath);
+
+        if (existsSync(destFile)) {
+          const decision = await resolveDestinationConflict(
+            destFile,
+            interactive,
+          );
+          if (decision === "skip") {
+            conflictOutcomes.push({ destFile, outcome: "skipped" });
+            excludedFromHash.add(relativePath);
+            continue;
+          }
+          const finalPath = resolveAvailableSuffixedPath(destFile);
+          conflictOutcomes.push({
+            destFile,
+            outcome: "suffixed",
+            finalPath,
+          });
+          excludedFromHash.add(relativePath);
+          destFile = finalPath;
+        }
+
+        mkdirSync(dirname(destFile), { recursive: true });
+        writeFileSync(destFile, content, "utf8");
+        writtenFiles.push(destFile);
+      }
+      excludedFromHashByItem.set(itemName, excludedFromHash);
+      placedNames.push(itemName);
+    }
+
+    // 0018-manifest-content-hash-local-edit-detection.md: contentHash is
+    // defined as computed from the *primary* declared harness's placed
+    // content (alphabetically first of the manifest's harnesses). Adding a
+    // harness can make it the new primary — when it does, every
+    // already-recorded hash is recomputed from this freshly-placed
+    // (guaranteed-clean) content, or a later local-edit check would compare
+    // it against the wrong harness's folder and misreport drift that was
+    // never actually introduced.
+    const newHarnesses = [...existingHarnesses, harnessName].sort();
+    const newPrimaryHarness = newHarnesses[0] as string;
+
+    // harnessName is new — it wasn't in existingHarnesses at all — so
+    // newPrimaryHarness === harnessName implies primary just changed to it.
+    // Anything else (primary staying the same, or another already-declared
+    // harness becoming primary) leaves every existing contentHash valid
+    // exactly as recorded, since neither folder it could reference changed.
+    const newSkills: Record<string, SkillEntry> = { ...existingSkills };
+    if (newPrimaryHarness === harnessName) {
+      for (const [itemName, files] of backfillFiles) {
+        const entry = newSkills[itemName];
+        if (!entry?.contentHash) {
+          continue;
+        }
+        const excluded = excludedFromHashByItem.get(itemName) ?? new Set();
+        const entries: Array<[string, string]> = [...files.entries()].filter(
+          ([relativePath]) =>
+            !isRegistryOnlyFile(relativePath) && !excluded.has(relativePath),
+        );
+        newSkills[itemName] = { ...entry, contentHash: hashEntries(entries) };
+      }
+    }
+
+    const newManifest = migrateManifest({
+      schemaVersion: 1,
+      harnesses: newHarnesses,
+      skills: newSkills,
+    });
+    writeFileSync(
+      manifestPath,
+      `${JSON.stringify(newManifest, null, 2)}\n`,
+      "utf8",
+    );
+
+    await git.add(".");
+    await git.commit(
+      `hatch import: add harness "${harnessName}" (${placedNames.length} item${placedNames.length === 1 ? "" : "s"} backfilled)`,
+    );
+
+    console.log(
+      `hatch import: added harness "${harnessName}" — backfilled ${placedNames.length} item(s): ${placedNames.join(", ")}.`,
+    );
+    for (const outcome of conflictOutcomes) {
+      if (outcome.outcome === "skipped") {
+        console.log(
+          `  skipped "${outcome.destFile}" — already existed and wasn't placed by Hatch.`,
+        );
+      } else {
+        console.log(
+          `  "${outcome.destFile}" already existed — placed alongside it as "${outcome.finalPath}".`,
+        );
+      }
+    }
+    return 0;
+  } catch (error) {
+    for (const file of writtenFiles) {
+      rmSync(file, { force: true });
+    }
+    writeFileSync(manifestPath, originalManifestRaw, "utf8");
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `hatch import: failed to add harness "${harnessName}" (${message}) — nothing was changed.`,
+    );
+    return 1;
+  }
 }

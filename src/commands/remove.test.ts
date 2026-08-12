@@ -395,6 +395,182 @@ describe("runRemove — group removal", () => {
   });
 });
 
+describe("runRemove — AF-5: drop a harness", () => {
+  it("removes the harness's placed content for every standalone skill and group member, drops it from the manifest, one commit — leaving other harnesses untouched", async () => {
+    const claudeHash = placeSkill(".claude", "hatch-usage", {
+      "SKILL.md": "# Hatch Usage",
+    });
+    placeSkill(".codex", "hatch-usage", { "SKILL.md": "# Hatch Usage" });
+    placeSkill(".claude", "design-architecture-decision", {
+      "SKILL.md": "# A",
+    });
+    placeSkill(".codex", "design-architecture-decision", { "SKILL.md": "# A" });
+    writeManifest(
+      {
+        "hatch-usage": { version: "1.0.0", contentHash: claudeHash },
+        "design-architecture-decision": {
+          version: "1.0.0",
+          group: "architecture-decisions",
+          contentHash: hashDiskTree(
+            join(target, ".claude", "skills", "design-architecture-decision"),
+          ),
+        },
+        "architecture-decisions": { version: "1.0.0" },
+      },
+      ["claude", "codex"],
+    );
+    await commitAll("seed");
+
+    const exitCode = await runRemove(["--harness", "codex", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(existsSync(join(target, ".codex", "skills", "hatch-usage"))).toBe(
+      false,
+    );
+    expect(
+      existsSync(
+        join(target, ".codex", "skills", "design-architecture-decision"),
+      ),
+    ).toBe(false);
+    expect(existsSync(join(target, ".claude", "skills", "hatch-usage"))).toBe(
+      true,
+    );
+    expect(
+      existsSync(
+        join(target, ".claude", "skills", "design-architecture-decision"),
+      ),
+    ).toBe(true);
+
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.harnesses).toEqual(["claude"]);
+    // Content untouched — dropping a harness never touches the manifest's
+    // skills entries, only the harnesses array (0023).
+    expect(Object.keys(manifest.skills).sort()).toEqual([
+      "architecture-decisions",
+      "design-architecture-decision",
+      "hatch-usage",
+    ]);
+
+    const log = await simpleGit(target).log();
+    expect(log.total).toBe(2);
+    expect(log.latest?.message).toContain('drop harness "codex"');
+  });
+
+  it("removes the harness's content unconditionally, even when it has local edits — no flag needed, per 0023", async () => {
+    const hash = placeSkill(".claude", "hatch-usage", {
+      "SKILL.md": "# Hatch Usage",
+    });
+    placeSkill(".codex", "hatch-usage", { "SKILL.md": "# Hatch Usage" });
+    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } }, [
+      "claude",
+      "codex",
+    ]);
+    await commitAll("seed");
+
+    // Hand-edit the codex-side content — hatch remove --harness must not
+    // care, since AF-5 has no drift/local-edit gating at all.
+    writeFileSync(
+      join(target, ".codex", "skills", "hatch-usage", "SKILL.md"),
+      "# Hand-edited",
+      "utf8",
+    );
+
+    const exitCode = await runRemove(["--harness", "codex", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(existsSync(join(target, ".codex", "skills", "hatch-usage"))).toBe(
+      false,
+    );
+  });
+
+  it("refuses to drop the project's only declared harness", async () => {
+    const hash = placeSkill(".claude", "hatch-usage", {
+      "SKILL.md": "# Hatch Usage",
+    });
+    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } }, [
+      "claude",
+    ]);
+    await commitAll("seed");
+
+    const exitCode = await runRemove(["--harness", "claude", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some((l) =>
+        l.includes("must always declare at least one harness"),
+      ),
+    ).toBe(true);
+    expect(existsSync(join(target, ".claude", "skills", "hatch-usage"))).toBe(
+      true,
+    );
+    const log = await simpleGit(target).log();
+    expect(log.total).toBe(1);
+  });
+
+  it("no-ops when the named harness isn't declared in this project", async () => {
+    writeManifest({}, ["claude"]);
+    await commitAll("seed");
+
+    const exitCode = await runRemove(["--harness", "codex", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.harnesses).toEqual(["claude"]);
+  });
+
+  it("no-ops when there is no manifest at all", async () => {
+    const exitCode = await runRemove(["--harness", "claude", "--path", target]);
+    expect(exitCode).toBe(0);
+  });
+
+  it("rejects an unrecognized harness code", async () => {
+    writeManifest({}, ["claude"]);
+    await commitAll("seed");
+
+    const exitCode = await runRemove(["--harness", "bogus", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some((l) => l.includes('unrecognized harness "bogus"')),
+    ).toBe(true);
+  });
+
+  it("recomputes contentHash against the new primary harness when dropping the old primary, so a later local-edit check isn't misled", async () => {
+    // claude sorts before codex, so claude starts primary. Give it content
+    // that differs from codex's own placed content (as harness-suffix
+    // resolution legitimately can produce) — hatch-usage's manifest
+    // contentHash is recorded from claude's (primary) content.
+    const claudeHash = placeSkill(".claude", "hatch-usage", {
+      "SKILL.md": "# Claude variant",
+    });
+    placeSkill(".codex", "hatch-usage", { "SKILL.md": "# Codex variant" });
+    writeManifest(
+      { "hatch-usage": { version: "1.0.0", contentHash: claudeHash } },
+      ["claude", "codex"],
+    );
+    await commitAll("seed");
+
+    // Drop claude (the old primary) — codex becomes the new primary. Its
+    // own on-disk content ("# Codex variant") was never hashed before.
+    const dropExit = await runRemove(["--harness", "claude", "--path", target]);
+    expect(dropExit).toBe(0);
+
+    // A later remove of hatch-usage must see it as clean (not falsely
+    // "edited") — the hash must have been recomputed against codex's own
+    // untouched content, not left pointing at claude's now-deleted content.
+    const removeExit = await runRemove(["hatch-usage", "--path", target]);
+    expect(removeExit).toBe(0);
+    expect(consoleLogs.some((l) => l.includes("has local edits"))).toBe(false);
+    expect(existsSync(join(target, ".codex", "skills", "hatch-usage"))).toBe(
+      false,
+    );
+  });
+});
+
 describe("runRemove — argument handling", () => {
   it("rejects combining --force-all and --force-clean", async () => {
     const exitCode = await runRemove([
@@ -415,7 +591,20 @@ describe("runRemove — argument handling", () => {
     expect(exitCode).toBe(1);
   });
 
-  it("rejects an unrecognized option (including --harness, deferred to Batch 9)", async () => {
+  it("rejects an unrecognized option", async () => {
+    const exitCode = await runRemove([
+      "hatch-usage",
+      "--path",
+      target,
+      "--bogus",
+    ]);
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some((l) => l.includes('unrecognized option "--bogus"')),
+    ).toBe(true);
+  });
+
+  it("rejects combining --harness with a skill/group name", async () => {
     const exitCode = await runRemove([
       "hatch-usage",
       "--path",
@@ -424,9 +613,23 @@ describe("runRemove — argument handling", () => {
       "claude",
     ]);
     expect(exitCode).toBe(1);
-    expect(
-      consoleErrors.some((l) => l.includes('unrecognized option "--harness"')),
-    ).toBe(true);
+    expect(consoleErrors.some((l) => l.includes("cannot be combined"))).toBe(
+      true,
+    );
+  });
+
+  it("rejects combining --harness with --force-all", async () => {
+    const exitCode = await runRemove([
+      "--path",
+      target,
+      "--harness",
+      "claude",
+      "--force-all",
+    ]);
+    expect(exitCode).toBe(1);
+    expect(consoleErrors.some((l) => l.includes("cannot be combined"))).toBe(
+      true,
+    );
   });
 
   it("rejects a target project path that doesn't exist", async () => {
