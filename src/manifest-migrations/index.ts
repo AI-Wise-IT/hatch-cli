@@ -2,7 +2,7 @@
 // Every command that reads the manifest routes it through migrateManifest()
 // before using its contents.
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 type Manifest = Record<string, unknown>;
 type Migration = (manifest: Manifest) => Manifest;
@@ -15,6 +15,14 @@ const migrations: Record<number, Migration> = {
   // a schema-version bump only; no existing v1 field is renamed or removed,
   // and nothing is backfilled onto pre-existing entries.
   1: (manifest) => manifest,
+  // v2 -> v3 (0018-manifest-content-hash-local-edit-detection.md,
+  // 0020-standalone-version-pin-manifest-and-parsing.md): adds optional
+  // `contentHash` and `pin` fields per skill entry — one migration, two
+  // additive fields, per 0020's own precedent decision not to split them
+  // into competing schema bumps. Nothing is backfilled onto pre-existing
+  // v2 entries: a skill imported before this batch has no baseline
+  // contentHash and no pin until it's next placed or pinned.
+  2: (manifest) => manifest,
 };
 
 export function migrateManifest(manifest: Manifest): Manifest {
