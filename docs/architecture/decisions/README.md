@@ -23,3 +23,4 @@
 | 0019 | `0019-registry-removed-metadata-flag` | skill-registry-group-structure | accepted | [`0019-registry-removed-metadata-flag.md`](0019-registry-removed-metadata-flag.md) |
 | 0020 | `0020-standalone-version-pin-manifest-and-parsing` | data-migrations | accepted | [`0020-standalone-version-pin-manifest-and-parsing.md`](0020-standalone-version-pin-manifest-and-parsing.md) |
 | 0021 | `0021-block-first-time-import-of-removed-target` | skill-registry-group-structure | accepted | [`0021-block-first-time-import-of-removed-target.md`](0021-block-first-time-import-of-removed-target.md) |
+| 0022 | `0022-remove-force-flags-not-prompt` | cli-remove-command | accepted | [`0022-remove-force-flags-not-prompt.md`](0022-remove-force-flags-not-prompt.md) |

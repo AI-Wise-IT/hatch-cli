@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { runImport } from "./commands/import.js";
 import { runLogin } from "./commands/login.js";
 import { runNew } from "./commands/new.js";
+import { runRemove } from "./commands/remove.js";
 
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const { version } = JSON.parse(
@@ -22,6 +23,8 @@ if (!command) {
   process.exitCode = await runNew(rest);
 } else if (command === "import") {
   process.exitCode = await runImport(rest);
+} else if (command === "remove") {
+  process.exitCode = await runRemove(rest);
 } else {
   console.error(`hatchcli: unknown command "${command}".`);
   process.exitCode = 1;
