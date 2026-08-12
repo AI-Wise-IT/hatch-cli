@@ -106,10 +106,17 @@ Triggered when the developer runs `hatch import <name>@^<version>`.
 - System records the manifest entry as range-pinned at that floor, for visibility, but this does not change update behavior: a range-pinned skill/group continues to auto-update on later re-imports exactly like an unpinned one (AF-2 applies normally).
 - Terminates in Success.
 
+### AF-13: Import target is removed, and has never been imported before
+Triggered at step 4 when the named target — a standalone skill or a group, whichever is named directly on the command line — is being imported for the first time (no existing manifest entry for it) and the registry's current metadata for it is flagged removed (see ADR-0013, ADR-0019).
+- System refuses the import outright: nothing is placed, no manifest change, no commit.
+- System reports that the target is removed and cannot be newly imported.
+- Terminates in Failure.
+- Distinct from AF-4: AF-4 warns about something a project *already* depends on; AF-13 blocks a project from *newly starting* to depend on something already known to be deprecated. AF-13 does not apply to a re-import of something already recorded in the manifest (still AF-4's warn-only path), and does not apply merely because a member of an otherwise-fine group is removed (also still warn-only, pending future registry-side dependency detection — not yet built; see ADR-0021).
+
 ## Postconditions
 
 - **Success:** The target skill/group (or harness backfill) is correctly reflected in the project — content placed per declared harnesses, manifest updated, one commit made — except where AF-1 (no-op), AF-3 (local edits protected), or AF-10 (exactly pinned) apply, in which case that specific item is left exactly as it was. Any deprecation warning is surfaced regardless of the primary outcome.
-- **Failure:** No changes are made anywhere — no content placed, no manifest change, no commit — when the registry is unreachable, authentication fails, or a group's pinned-pointer members conflict across different MAJOR versions (AF-9).
+- **Failure:** No changes are made anywhere — no content placed, no manifest change, no commit — when the registry is unreachable, authentication fails, a group's pinned-pointer members conflict across different MAJOR versions (AF-9), or the named target is a first-time import of something removed (AF-13).
 
 ## Business Rules
 
@@ -119,6 +126,7 @@ Triggered when the developer runs `hatch import <name>@^<version>`.
 - A pinned-pointer version conflict within one import is resolved deterministically, never silently guessed: highest pinned version wins with a warning when the conflicting versions share a MAJOR version; the whole import is blocked otherwise (see AF-9).
 - Placed content is never overwritten if it differs from what was originally imported — a local edit is assumed intentional.
 - Deprecation/removal checks run on every invocation and cover all previously-imported skills/groups, not just the one being acted on.
+- A removed flag warns, never blocks, for anything a project already depends on (AF-4) — but blocks outright a first-time import of the exact named target itself, standalone skill or group (AF-13, see ADR-0021). This distinction does not (yet) extend to a group member discovered removed mid-resolution while the group's own entry is fine — that remains warn-only, pending a registry-side check (not yet built) that a group's current version doesn't depend on a removed skill.
 - The destination-occupied conflict can be resolved interactively or, for unattended/cloud-agent runs, defaults to skipping the conflicting file rather than blocking.
 - Harness placement is governed by the project manifest's recorded harness(es), never by scanning the filesystem for which harness folders happen to exist.
 - No two skills in the registry may claim the same destination path — that invariant is enforced separately at the registry level (see UC-5 — Prevent destination-path collisions across the registry), using the same resolution logic `hatch import` itself uses (see ADR-0014), not a separate reimplementation. This use case's destination-occupied handling is specifically about a pre-existing, non-Hatch-placed file already sitting at a path, not a registry-level collision.

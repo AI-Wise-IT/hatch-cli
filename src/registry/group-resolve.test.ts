@@ -56,6 +56,26 @@ describe("parseGroupSkillJson", () => {
       /not valid JSON/,
     );
   });
+
+  it("surfaces a removed:true flag alongside version/members (0019, 0021)", () => {
+    const result = parseGroupSkillJson(
+      JSON.stringify({ version: "1.0.0", removed: true }),
+      "foo",
+    );
+    expect(result).toEqual({ version: "1.0.0", removed: true });
+  });
+
+  it("treats an absent or false removed field as not removed", () => {
+    expect(
+      parseGroupSkillJson(skillJson("1.0.0"), "foo").removed,
+    ).toBeUndefined();
+    expect(
+      parseGroupSkillJson(
+        JSON.stringify({ version: "1.0.0", removed: false }),
+        "foo",
+      ).removed,
+    ).toBeUndefined();
+  });
 });
 
 describe("resolveGroupMembers — nested members", () => {

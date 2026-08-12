@@ -45,7 +45,7 @@ Surfaced directly to the developer rather than guessed, mirroring the standing p
 - MUST treat an absent `removed` field, or `removed: false`, as active/normal — MUST NOT require the field to be present on ordinary content.
 - MUST NOT implement a "deprecated" state distinct from "removed" in this MVP.
 - MUST check every manifest-recorded skill/group's current `removed` status on every `hatch import` invocation, not only the name being explicitly acted on.
-- MUST surface a flagged entry as a warning in the run's output — MUST NOT block, fail, or alter the primary operation because of a flagged entry.
+- MUST surface a flagged entry as a warning in the run's output — MUST NOT block, fail, or alter the primary operation because of a flagged entry, **except** a first-time import of the exact named primary target, which [0021-block-first-time-import-of-removed-target](0021-block-first-time-import-of-removed-target.md) narrows this rule to refuse.
 - MUST NOT change fetch, resolution, or placement behavior for a flagged folder — its content remains fully fetchable per [0013](0013-registry-group-structure-and-permanence.md).
 
 ## Machine Check
@@ -61,4 +61,5 @@ Expected result: a registry folder intentionally flagged removed shows `"removed
 - Resolves the open item [0013-registry-group-structure-and-permanence](0013-registry-group-structure-and-permanence.md)'s Consequences section left unsettled: "the flagged item's status changes" without fixing the concrete field.
 - Builds on [0009-skill-versioning-semver-tags](0009-skill-versioning-semver-tags.md) and [0016-group-member-manifest-format](0016-group-member-manifest-format.md) (the per-folder `skill.json` convention this field is added to).
 - Sequenced alongside [0018-manifest-content-hash-local-edit-detection](0018-manifest-content-hash-local-edit-detection.md) and [0020-standalone-version-pin-manifest-and-parsing](0020-standalone-version-pin-manifest-and-parsing.md), both also Batch 7 gaps resolved in the same developer conversation.
+- [0021-block-first-time-import-of-removed-target](0021-block-first-time-import-of-removed-target.md) narrows this record's "never blocks" rule for the one case of a first-time import of the exact named primary target — every other case this record describes (re-import, a group member encountered during resolution) is unaffected and still governed here.
 - No known conflicting decision records.

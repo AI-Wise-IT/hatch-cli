@@ -1221,3 +1221,198 @@ describe("runImport — Batch 7: group re-import", () => {
     expect(manifest.skills.b.version).toBe("1.1.0"); // updated
   });
 });
+
+// Post-Batch-7 review findings (0021-block-first-time-import-of-removed-target).
+
+describe("runImport — registry-only files are never deployed", () => {
+  it("does not place a NOTE.md (or skill.json) found in the fetched content", async () => {
+    vi.mocked(fetchRegistryFolder).mockResolvedValue({
+      ok: true,
+      files: new Map([
+        ["SKILL.md", "# Hatch Usage"],
+        ["skill.json", '{"version":"1.0.0"}'],
+        ["NOTE.md", "fixture authoring notes, never deployed"],
+      ]),
+    });
+
+    const exitCode = await runImport([
+      "hatch-usage",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      existsSync(join(target, ".claude", "skills", "hatch-usage", "SKILL.md")),
+    ).toBe(true);
+    expect(
+      existsSync(join(target, ".claude", "skills", "hatch-usage", "NOTE.md")),
+    ).toBe(false);
+    expect(
+      existsSync(
+        join(target, ".claude", "skills", "hatch-usage", "skill.json"),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("runImport — AF-13: first-time import of a removed target is blocked", () => {
+  it("refuses a first-time import of a removed standalone skill — nothing changed", async () => {
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "gone-skill/skill.json") {
+        return {
+          ok: true,
+          content: JSON.stringify({ version: "1.0.0", removed: true }),
+        };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+
+    const exitCode = await runImport([
+      "gone-skill",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some(
+        (m) => m.includes("gone-skill") && m.includes("removed"),
+      ),
+    ).toBe(true);
+    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expect(fetchRegistryFolder).not.toHaveBeenCalled();
+  });
+
+  it("refuses a first-time import of a removed group", async () => {
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "gone-group/skill.json") {
+        return {
+          ok: true,
+          content: JSON.stringify({
+            version: "1.0.0",
+            removed: true,
+            members: [{ kind: "nested", name: "a" }],
+          }),
+        };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+
+    const exitCode = await runImport([
+      "gone-group",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some(
+        (m) => m.includes("gone-group") && m.includes("removed"),
+      ),
+    ).toBe(true);
+    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+  });
+
+  it("does not block a re-import of something already in the manifest that later became removed (AF-4 still applies, warn-only)", async () => {
+    let removed = false;
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "hatch-usage/skill.json") {
+        return {
+          ok: true,
+          content: JSON.stringify({ version: "1.0.0", removed }),
+        };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+
+    let exitCode = await runImport([
+      "hatch-usage",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+    expect(exitCode).toBe(0);
+
+    removed = true;
+    consoleLogs.length = 0;
+    exitCode = await runImport(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(0); // AF-1/AF-4, not AF-13 — already imported
+    expect(
+      existsSync(join(target, ".claude", "skills", "hatch-usage", "SKILL.md")),
+    ).toBe(true);
+  });
+
+  it("does not block a group whose own entry is fine but a member is removed (unchanged, warn-only)", async () => {
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "fine-group/skill.json") {
+        return {
+          ok: true,
+          content: groupSkillJson("1.0.0", [
+            { kind: "pointer", name: "removed-member" },
+          ]),
+        };
+      }
+      if (path === "removed-member/skill.json") {
+        return {
+          ok: true,
+          content: JSON.stringify({ version: "1.0.0", removed: true }),
+        };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(
+      async (_token, folderName) => {
+        if (folderName === "fine-group") {
+          return {
+            ok: true,
+            files: new Map([
+              [
+                "skill.json",
+                groupSkillJson("1.0.0", [
+                  { kind: "pointer", name: "removed-member" },
+                ]),
+              ],
+            ]),
+          };
+        }
+        if (folderName === "removed-member") {
+          return {
+            ok: true,
+            files: new Map([
+              [
+                "skill.json",
+                JSON.stringify({ version: "1.0.0", removed: true }),
+              ],
+              ["SKILL.md", "# Removed member"],
+            ]),
+          };
+        }
+        throw new Error(`unexpected fetch of ${folderName}`);
+      },
+    );
+
+    const exitCode = await runImport([
+      "fine-group",
+      "--path",
+      target,
+      "--harness",
+      "claude",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      existsSync(
+        join(target, ".claude", "skills", "removed-member", "SKILL.md"),
+      ),
+    ).toBe(true);
+  });
+});
