@@ -1,6 +1,6 @@
 {
   "name": "@ai-wise/hatchcli",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Hatch CLI — import and manage AI coding-agent skills across projects",
   "type": "module",
   "license": "MIT",
