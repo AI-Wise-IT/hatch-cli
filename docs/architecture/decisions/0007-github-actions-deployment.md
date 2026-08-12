@@ -60,6 +60,10 @@ The developer's stated reasoning for wanting merges gated (see [0008-trunk-based
 - MUST publish via npm Trusted Publishing (OIDC), with `id-token: write` granted to the release job.
 - MUST NOT store a long-lived npm token as a GitHub Actions secret for the publish step without superseding this record.
 
+## Invariants
+
+None. Trigger mechanics, OIDC vs. token auth, and vendor choice are all internal release plumbing — invisible to and unrelied-upon by any external consumer of the published package. Nothing here becomes harder to reverse once real users exist; it stays an ordinary, freely-revisable operational choice.
+
 ## Machine Check
 
 ```bash

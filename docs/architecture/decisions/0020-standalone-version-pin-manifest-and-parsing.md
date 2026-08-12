@@ -64,6 +64,10 @@ Surfaced directly to the developer rather than guessed, mirroring the standing p
 - MUST NOT validate a range pin's floor against any resolved or fetched version in this MVP.
 - MUST NOT write this standalone `pin` field from a group's internal pointer-member pin resolution (AF-9) — that mechanism remains entirely separate, per [0013](0013-registry-group-structure-and-permanence.md)/[0016](0016-group-member-manifest-format.md).
 
+## Invariants
+
+- **The `pin: {type, value}` manifest field shape, and the `<name>@<spec>` argument-parsing rules (`latest` / `^semver` / bare-literal).** Becomes irreversible once: any real project has a stored `pin` field, or a real script has been written against the `@spec` argument syntax — changing either would break existing pinned projects' re-import behavior or break automation. Enforcement mechanism: the manifest field itself is covered by [0010-manifest-schema-migrations](0010-manifest-schema-migrations.md)'s general migration-chain rule; the CLI argument-parsing convention has no dedicated enforcement of its own. Current mode: not-yet-built for the parsing-convention half.
+
 ## Machine Check
 
 ```bash

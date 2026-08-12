@@ -48,6 +48,10 @@ For the skill-content repo, this is not a genuinely open choice: [0001-harness-s
 - MUST keep the Hatch CLI repo public.
 - MUST NOT make the skill-content repo public, and MUST NOT make the Hatch CLI repo private again, without superseding this record.
 
+## Invariants
+
+None in the sense this section usually means. The skill-content repo's privacy is a standing security requirement independent of whether real dependents exist yet — reversing it (making it public) would be a security incident regardless of launch state, not something that only becomes costly once users show up. Nothing in this record is "safe to relax pre-launch, then lock down" — it's binding from day one.
+
 ## Machine Check
 
 ```bash

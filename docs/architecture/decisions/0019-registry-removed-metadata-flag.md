@@ -48,6 +48,10 @@ Surfaced directly to the developer rather than guessed, mirroring the standing p
 - MUST surface a flagged entry as a warning in the run's output — MUST NOT block, fail, or alter the primary operation because of a flagged entry, **except** a first-time import of the exact named primary target, which [0021-block-first-time-import-of-removed-target](0021-block-first-time-import-of-removed-target.md) narrows this rule to refuse.
 - MUST NOT change fetch, resolution, or placement behavior for a flagged folder — its content remains fully fetchable per [0013](0013-registry-group-structure-and-permanence.md).
 
+## Invariants
+
+- **The `removed` field's shape: a plain boolean on `skill.json`, never a separate status enum or index file.** Becomes irreversible once: real registry content uses this flag and the CLI's parser depends on its exact shape — switching to a richer status representation later would need to handle every already-published `removed: true` folder written under the old shape. Enforcement mechanism: none dedicated; covered only by ordinary registry-content review today. Current mode: not-yet-built.
+
 ## Machine Check
 
 ```bash

@@ -61,6 +61,11 @@ The three harnesses in scope today are Claude, Codex, and Cursor, with abbreviat
 - `hatch import`'s resolution logic MUST read the current reserved codes from the harness registry at run time (never a hardcoded copy), prefer the suffixed variant over the unsuffixed default for its target harness, and MUST strip the harness-code suffix on deploy.
 - The registry's publish lint MUST read the same harness registry and flag any skill name ending in one of its reserved codes for human review before publishing.
 
+## Invariants
+
+- **The harness-code reserved set only grows — a code, once reserved, is never removed or reused for something unrelated** (Consequences: "new codes are added, never removed"). Becomes irreversible once: any registry content or CLI resolution logic has shipped that assumes today's reserved-code set — reusing a retired code for something else could silently misresolve already-published content. Enforcement mechanism: none dedicated; [0014-registry-collision-detection](0014-registry-collision-detection.md)'s check assumes this invariant rather than verifying it directly. Current mode: not-yet-built.
+- **MUST NOT rely on metadata or frontmatter to declare a skill's target harness — the folder name is the sole source of truth.** Becomes irreversible once: a real project's placed content, and any tooling built around it, assumes folder-name-based resolution — switching to metadata-based resolution later would require re-resolving every already-placed skill. Enforcement mechanism: none — an unenforced convention in `hatch import`'s implementation today. Current mode: not-yet-built.
+
 ## Machine Check
 
 No automated registry tooling exists yet; this is the smallest concrete manual check until one does. It deliberately reads the reserved codes from the harness registry rather than hardcoding them, so the check stays correct as the registry grows.

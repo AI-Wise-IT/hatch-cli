@@ -59,6 +59,10 @@ The harness-registry's reserved-code set only ever grows ([0001](0001-harness-su
 - MUST trigger the CLI-side check on any hatch-cli PR touching the harness registry or resolution logic, and MUST block that PR on a detected collision against the current hatch-skills tree.
 - MUST scope hatch-cli's credential for reading the private hatch-skills repo to read-only access, used only by this check.
 
+## Invariants
+
+- **MUST block a hatch-cli PR that would retroactively collide with existing registry content.** Becomes irreversible-to-relax once: real registry content and real reserved harness codes exist that this check protects — disabling it would let a future harness-code addition silently break resolution for already-published content. Enforcement mechanism: hatch-cli's own CI job, triggered on harness-registry/resolution changes, intended as a required status check. Current mode: **not-yet-built** — [Batch 10](../../build-plan.md) (`docs/build-plan.md`), which implements this check on both sides, is still planned, not built. `pre-launch-audit` should re-verify this once Batch 10 lands, since its documented mode will need updating here.
+
 ## Machine Check
 
 ```bash

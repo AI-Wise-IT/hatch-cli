@@ -44,6 +44,10 @@ No live end-to-end tests against the real registry or the real GitHub API run in
 - MUST mock GitHub API calls in tests rather than hitting the live registry.
 - MUST NOT add live end-to-end tests against the real registry to the required CI gate in this MVP.
 
+## Invariants
+
+None. Test-runner choice is entirely internal — no external dependent observes or relies on which framework verifies the CLI's own behavior. Freely revisable at any time.
+
 ## Machine Check
 
 ```bash

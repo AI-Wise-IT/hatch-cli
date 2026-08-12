@@ -43,6 +43,10 @@ UC-3 and UC-4's business rule that every `hatch import`/`hatch remove` operation
 - MUST rewrite the manifest at that command's next write once migrated.
 - MUST NOT implement a separate manual `hatch migrate` command in this MVP.
 
+## Invariants
+
+- **MUST run every manifest read through the ordered migration-function chain up to the CLI's current schema version.** Becomes irreversible once: any real project has a manifest at a schema version older than the CLI's current version — removing or reordering an already-shipped migration function would strand that project, unable to read its own manifest, directly violating the PRD's own "must never become stuck" constraint. Enforcement mechanism: none dedicated — pure code discipline today; no test currently asserts that every historically-shipped migration key stays registered. Current mode: not-yet-built. This is a strong candidate for an automated regression check (a test asserting the full historical chain of migration keys is still present) before any real project's manifest could be on an old schema version.
+
 ## Machine Check
 
 ```bash

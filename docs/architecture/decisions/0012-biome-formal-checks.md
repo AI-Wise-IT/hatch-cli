@@ -42,6 +42,10 @@ Biome handles both linting and formatting (single tool, single config) in the Ha
 - MUST NOT treat the pre-commit hook as a substitute for the CI required status check — both must run.
 - MUST NOT introduce ESLint or Prettier alongside Biome without superseding this record.
 
+## Invariants
+
+None. Lint/format/type-check tooling is entirely internal — no external dependent observes or relies on which tool enforces code quality. Freely revisable at any time.
+
 ## Machine Check
 
 ```bash

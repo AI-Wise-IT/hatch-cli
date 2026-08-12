@@ -55,6 +55,10 @@ Surfaced directly to the developer rather than guessed, mirroring the standing p
 - MUST recompute the hash from current on-disk content and compare against the stored `contentHash` before choosing between AF-1/AF-2 and AF-3 on any re-import.
 - MUST NOT re-fetch registry content solely to perform the local-edit comparison — the comparison MUST be local only.
 
+## Invariants
+
+- **The `contentHash` computation algorithm** (SHA-256 over sorted `(relativePath, content)` pairs, excluding `skill.json` and any AF-6 skip/suffix outcome, primary-harness-only). Becomes irreversible once: any real project has a stored `contentHash` computed this way — changing the algorithm later would make every existing stored hash mismatch on the next re-import, falsely triggering AF-3 (local edits present) project-wide even though nothing was actually edited. Enforcement mechanism: none — the algorithm carries no version tag of its own, so a future change would have no way to distinguish an "old-algorithm hash" from a "new-algorithm hash" on an existing entry. Current mode: not-yet-built. No new invariant beyond [0010-manifest-schema-migrations](0010-manifest-schema-migrations.md)'s general rule for this record's own migration function (keyed `2`, shared with [0020-standalone-version-pin-manifest-and-parsing](0020-standalone-version-pin-manifest-and-parsing.md)).
+
 ## Machine Check
 
 ```bash

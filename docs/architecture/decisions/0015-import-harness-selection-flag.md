@@ -52,6 +52,10 @@ This gap surfaced directly while building Batch 5 (`hatch import`, first-time st
 - MUST NOT infer harness selection from the target project's filesystem contents under any circumstance.
 - MUST govern placement entirely from the manifest's recorded `harnesses` once a manifest exists, ignoring any `--harness` value for ordinary (non-backfill) import behavior.
 
+## Invariants
+
+None. This governs first-import bootstrap behavior only; once a manifest exists, placement is entirely manifest-driven regardless of this flag. Nothing here locks in registry state or a published name — it's ordinary CLI behavior, revisable by shipping a new CLI version without invalidating anything an external dependent already has.
+
 ## Machine Check
 
 ```bash

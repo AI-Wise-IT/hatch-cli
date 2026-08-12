@@ -57,6 +57,10 @@ UC-4 ([`docs/use-cases/remove-content.md`](../../use-cases/remove-content.md)) d
 - MUST NOT accept `--force-all` and `--force-clean` together — MUST reject that combination as a usage error before any dirtiness evaluation.
 - MUST NOT change `hatch import`'s existing AF-3/AF-6 prompt-based mechanism as part of implementing this record.
 
+## Invariants
+
+- **The `--force-all`/`--force-clean` flag names and their exact, mutually-exclusive semantics.** Becomes irreversible once: real automation scripts pass these flags — renaming them or changing what each does would silently change what a script believes it's asking for. Enforcement mechanism: current behavior is covered by automated tests; nothing asserts these flag names/semantics stay stable release-over-release. Current mode: not-yet-built; flagged for completeness rather than urgency, since no real automation exists yet to depend on it.
+
 ## Machine Check
 
 ```bash

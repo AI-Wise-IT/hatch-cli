@@ -50,6 +50,10 @@ Surfaced directly to the developer rather than guessed, mirroring the precedent 
 - MUST treat a pointer member's `version` field as an exact pin when present, resolved via the `<name>@<version>` tag mechanism, and as "latest" (`ref=main`) when absent.
 - MUST allow a pointer member's `name` to reference another group, at arbitrary depth, consistent with [0013](0013-registry-group-structure-and-permanence.md).
 
+## Invariants
+
+- **The `members` array's `{kind, name, version?}` shape on a group's `skill.json`.** Becomes irreversible once: any real group has been published using this shape and the CLI's parser depends on it exactly — changing the shape without a compatible migration path would break every already-published group's machine-readability. Enforcement mechanism: none — unlike the project-level manifest ([0010-manifest-schema-migrations](0010-manifest-schema-migrations.md)), a group's own `skill.json` carries no `schemaVersion` field of its own. Current mode: not-yet-built. This is a real gap: registry-content schema has no equivalent to the project-manifest's migration chain, so an incompatible future change here would have no fallback path once real groups are published.
+
 ## Machine Check
 
 ```bash

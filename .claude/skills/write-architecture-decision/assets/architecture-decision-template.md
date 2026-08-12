@@ -50,6 +50,14 @@
 - MUST <required action or constraint>.
 - MUST NOT <forbidden action or shortcut>.
 
+## Invariants
+
+<!-- For each Agent Rule above, ask: once a real external dependent exists (a user, another team, a published artifact, live production data), would violating or reversing this rule be difficult or impossible? If yes, it's a pre-launch invariant — list it below with the condition that makes it irreversible and how it's (or will be) enforced. If genuinely none of this record's rules are irreversibility-bearing, write that plainly rather than forcing an entry. -->
+
+- **<the Agent Rule, quoted or closely paraphrased>** — becomes irreversible once: <the condition that flips it from reversible to permanent — e.g. "a real project imports this name," "a row exists in production," "a client has called this endpoint">. Enforcement mechanism: <how it's checked or blocked — a CI check, a database constraint, a runtime guard, a type, or "not yet built">. Current mode: <not-yet-built | advisory (detects and reports, does not block) | blocking (enforced)>.
+
+<!-- New enforcement for a fresh invariant should default to advisory — build and prove the mechanism before it can block anything, since nothing external depends on it yet. It only becomes blocking at a deliberate, later cutover, not automatically at the moment this record is written. -->
+
 ## Machine Check
 
 <!-- Provide one grep pattern, lint rule, script, command, or manual check that can verify conformance. If no automated check exists yet, write the smallest concrete manual check and explain what would make it fail. -->

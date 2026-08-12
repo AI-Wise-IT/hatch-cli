@@ -49,6 +49,10 @@ This decision was confirmed in the architecture conversation alongside 0003 (reg
 - MUST perform git operations against target-project repos by shelling out to the system `git` binary (e.g. via `simple-git`), never a native binding or a pure-JS git reimplementation.
 - MUST NOT introduce a compiled-binary distribution path (Go, Rust, or similar) for the primary CLI without superseding this record.
 
+## Invariants
+
+None. This record's choices (TypeScript/Node runtime, shelling out to system `git`) remain freely revisable without breaking any existing external dependent — a real user only ever interacts with the CLI's published interface ([0006-npm-public-distribution](0006-npm-public-distribution.md)), never its implementation runtime. Switching runtimes later would be a real engineering effort but wouldn't invalidate anything an external dependent already relies on.
+
 ## Machine Check
 
 ```bash
