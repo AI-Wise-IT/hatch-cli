@@ -55,7 +55,7 @@ export type GroupResolveResult =
   | { ok: true; members: ResolvedMember[]; warnings: string[] }
   | { ok: false; reason: GroupResolveFailureReason; detail: string };
 
-class GroupResolveError extends Error {
+export class GroupResolveError extends Error {
   reason: GroupResolveFailureReason;
   constructor(reason: GroupResolveFailureReason, detail: string) {
     super(detail);

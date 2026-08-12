@@ -19,3 +19,49 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
       - run: npm run build
+
+  # ADR-0014/ADR-0024: retroactive-collision guard. Always reports a status
+  # (so it's safe as a required check even when a PR doesn't touch
+  # harness-registry/resolution code — a path-filtered *trigger* would
+  # otherwise never report on unrelated PRs and block them forever). Only
+  # clones hatch-skills and runs the real check when something relevant
+  # changed.
+  collision-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check whether harness-registry/resolution logic changed
+        id: filter
+        run: |
+          git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" > changed-files.txt
+          cat changed-files.txt
+          if grep -qE '^src/(harness-registry\.(json|ts)|registry/(group-resolve|collision-check)\.ts)$' changed-files.txt; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.filter.outputs.relevant == 'true'
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+        if: steps.filter.outputs.relevant == 'true'
+      - run: npm run build
+        if: steps.filter.outputs.relevant == 'true'
+      - name: Checkout hatch-skills (read-only credential)
+        if: steps.filter.outputs.relevant == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: AI-Wise-IT/hatch-skills
+          token: ${{ secrets.HATCH_SKILLS_READ_TOKEN }}
+          path: hatch-skills-checkout
+      - name: Run collision check against hatch-skills
+        if: steps.filter.outputs.relevant == 'true'
+        run: node dist/index.js check-collisions --registry-path hatch-skills-checkout
+      - name: No harness-registry/resolution changes in this PR
+        if: steps.filter.outputs.relevant == 'false'
+        run: echo "Skipping — nothing relevant to the collision check changed."
