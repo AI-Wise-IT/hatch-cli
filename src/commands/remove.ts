@@ -1,11 +1,13 @@
 // `hatch remove` (UC-4): removes a previously-imported standalone skill, or
 // a whole group, from an existing project — deleting its placed content
 // from every declared harness folder, dropping its manifest entry/entries,
-// and committing once.
+// and committing once. Also removes a whole harness (`--harness <name>`),
+// dropping its placed content for every already-imported skill/group and
+// the harness itself from the manifest.
 // Batch 8 scope: UC-4 main flow, AF-1 (not imported), AF-2 (manifest/disk
 // drift), AF-3 (local edits present), AF-4 (target is a skill belonging to
-// a group — refused, the group is named instead). `--harness <name>` (AF-5,
-// dropping a harness) is Batch 9.
+// a group — refused, the group is named instead).
+// Batch 9 scope (this batch): AF-5, `--harness <name>` (dropping a harness).
 //
 // Per 0022-remove-force-flags-not-prompt.md: AF-2/AF-3 are never gated by an
 // interactive prompt, in either a standalone or a group removal. By default,
@@ -16,11 +18,16 @@
 // drift/edits; `--force-clean` removes only the clean ones, leaving any
 // dirty item in place with a warning (a no-op, not a failure, if every item
 // turns out dirty).
+//
+// Per 0023-remove-harness-drop-unconditional.md: `--harness <name>` is
+// unconditional — no AF-2/AF-3-style drift/local-edit gating, no
+// `--force-all`/`--force-clean` involvement. Its only precondition is UC-4's
+// "a project must always declare at least one harness" business rule.
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { simpleGit } from "simple-git";
-import { getHarnessDefinition } from "../harness-registry.js";
+import { getHarnessDefinition, isKnownHarness } from "../harness-registry.js";
 import {
   diskTreeIsEmpty,
   hashDiskTree,
@@ -28,7 +35,9 @@ import {
 import { migrateManifest } from "../manifest-migrations/index.js";
 
 interface ParsedArgs {
-  targetName: string;
+  // Exactly one of targetName/harnessName is set — parseArgs enforces this.
+  targetName: string | undefined;
+  harnessName: string | undefined;
   targetPath: string;
   force: "all" | "clean" | undefined;
 }
@@ -53,6 +62,7 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   const positional: string[] = [];
   let targetPath = process.cwd();
   let force: "all" | "clean" | undefined;
+  let harnessName: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -62,6 +72,12 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
         return { error: "--path requires a value" };
       }
       targetPath = value;
+    } else if (arg === "--harness") {
+      const value = argv[++i];
+      if (value === undefined) {
+        return { error: "--harness requires a value" };
+      }
+      harnessName = value;
     } else if (arg === "--force-all") {
       if (force === "clean") {
         return {
@@ -83,6 +99,28 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     }
   }
 
+  // AF-5 (0023-remove-harness-drop-unconditional.md): --harness takes no
+  // skill/group name and no force flag — it's a distinct operation from the
+  // named-target removal below, not a modifier on it.
+  if (harnessName !== undefined) {
+    if (positional.length > 0) {
+      return {
+        error: `"--harness" cannot be combined with a skill/group name ("${positional[0]}")`,
+      };
+    }
+    if (force) {
+      return {
+        error: `"--harness" cannot be combined with "--force-${force}"`,
+      };
+    }
+    return {
+      targetName: undefined,
+      harnessName,
+      targetPath: resolve(targetPath),
+      force: undefined,
+    };
+  }
+
   if (positional.length === 0) {
     return { error: "a skill or group name is required" };
   }
@@ -92,6 +130,7 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
 
   return {
     targetName: positional[0] as string,
+    harnessName: undefined,
     targetPath: resolve(targetPath),
     force,
   };
@@ -117,7 +156,7 @@ export async function runRemove(argv: string[]): Promise<number> {
     console.error(`hatch remove: ${parsed.error} — nothing was changed.`);
     return 1;
   }
-  const { targetName: name, targetPath, force } = parsed;
+  const { targetName, harnessName, targetPath, force } = parsed;
 
   if (!existsSync(targetPath)) {
     console.error(
@@ -125,6 +164,11 @@ export async function runRemove(argv: string[]): Promise<number> {
     );
     return 1;
   }
+
+  if (harnessName !== undefined) {
+    return runDropHarness(harnessName, targetPath);
+  }
+  const name = targetName as string;
 
   const manifestPath = join(targetPath, "hatch.manifest.json");
   if (!existsSync(manifestPath)) {
@@ -330,5 +374,158 @@ export async function runRemove(argv: string[]): Promise<number> {
     );
   }
 
+  return 0;
+}
+
+// AF-5 (0023-remove-harness-drop-unconditional.md): drops a whole harness —
+// checks only that it isn't the project's only declared harness, then
+// unconditionally removes that harness's placed content for every
+// already-imported skill/group and drops it from the manifest. No
+// AF-2/AF-3-style drift/local-edit gating, no --force-all/--force-clean
+// involvement (those remain scoped to the named-target path above, per
+// 0022-remove-force-flags-not-prompt.md).
+async function runDropHarness(
+  harnessName: string,
+  targetPath: string,
+): Promise<number> {
+  const manifestPath = join(targetPath, "hatch.manifest.json");
+  if (!existsSync(manifestPath)) {
+    console.log(
+      "hatch remove: no hatch.manifest.json found in this project — nothing to remove.",
+    );
+    return 0;
+  }
+
+  const originalManifestRaw = readFileSync(manifestPath, "utf8");
+  const manifest = migrateManifest(JSON.parse(originalManifestRaw));
+
+  const recordedHarnesses = manifest.harnesses;
+  if (
+    !Array.isArray(recordedHarnesses) ||
+    recordedHarnesses.length === 0 ||
+    !recordedHarnesses.every((h) => typeof h === "string")
+  ) {
+    console.error(
+      `hatch remove: "${manifestPath}" has no valid harnesses recorded — nothing was changed.`,
+    );
+    return 1;
+  }
+  const harnesses = recordedHarnesses as string[];
+
+  if (!isKnownHarness(harnessName)) {
+    console.error(
+      `hatch remove: unrecognized harness "${harnessName}" — nothing was changed.`,
+    );
+    return 1;
+  }
+
+  if (!harnesses.includes(harnessName)) {
+    console.log(
+      `hatch remove: "${harnessName}" is not a declared harness in this project — nothing to remove.`,
+    );
+    return 0;
+  }
+
+  // UC-4 Business Rules: a project must always declare at least one
+  // harness — this is the only precondition AF-5 checks.
+  if (harnesses.length === 1) {
+    console.error(
+      `hatch remove: cannot drop harness "${harnessName}" — a project must always declare at least one harness — nothing was changed.`,
+    );
+    return 1;
+  }
+
+  const oldPrimaryHarness = [...harnesses].sort()[0] as string;
+  const newHarnesses = harnesses.filter((h) => h !== harnessName).sort();
+  const newPrimaryHarness = newHarnesses[0] as string;
+
+  const skills: Record<string, SkillEntry> =
+    manifest.skills && typeof manifest.skills === "object"
+      ? (manifest.skills as Record<string, SkillEntry>)
+      : {};
+
+  // Every entry that corresponds to actually-placed content on disk: a
+  // standalone skill, or a group member (has its own `group` field). A
+  // group's own top-level entry is pure bookkeeping (0017-manifest-schema-
+  // v2-group-membership.md) — it has no folder of its own to remove.
+  const groupNames = new Set(
+    Object.values(skills)
+      .map((entry) => entry?.group)
+      .filter((g): g is string => g !== undefined),
+  );
+  const itemsWithContent = Object.keys(skills).filter(
+    (skillName) =>
+      skills[skillName]?.group !== undefined || !groupNames.has(skillName),
+  );
+
+  const newSkills: Record<string, SkillEntry> = { ...skills };
+
+  try {
+    for (const itemName of itemsWithContent) {
+      rmSync(
+        join(targetPath, getHarnessDefinition(harnessName).skillsDir, itemName),
+        { recursive: true, force: true },
+      );
+    }
+
+    // 0018-manifest-content-hash-local-edit-detection.md: a contentHash is
+    // defined as computed from the *primary* declared harness's placed
+    // content (alphabetically first of the manifest's harnesses). Dropping
+    // a harness can change which remaining harness is primary — when it
+    // does, every already-recorded hash is recomputed against the new
+    // primary's own (untouched) on-disk content, or a later local-edit
+    // check would compare it against the wrong harness's folder and
+    // misreport drift that was never actually introduced.
+    if (newPrimaryHarness !== oldPrimaryHarness) {
+      for (const itemName of itemsWithContent) {
+        const entry = newSkills[itemName];
+        if (!entry?.contentHash) {
+          continue;
+        }
+        const dir = join(
+          targetPath,
+          getHarnessDefinition(newPrimaryHarness).skillsDir,
+          itemName,
+        );
+        if (!diskTreeIsEmpty(dir)) {
+          newSkills[itemName] = { ...entry, contentHash: hashDiskTree(dir) };
+        }
+      }
+    }
+
+    const newManifest = migrateManifest({
+      schemaVersion: 1,
+      harnesses: newHarnesses,
+      skills: newSkills,
+    });
+    writeFileSync(
+      manifestPath,
+      `${JSON.stringify(newManifest, null, 2)}\n`,
+      "utf8",
+    );
+
+    const git = simpleGit(targetPath);
+    await git.add(".");
+    await git.commit(
+      `hatch remove: drop harness "${harnessName}" (${itemsWithContent.length} item${itemsWithContent.length === 1 ? "" : "s"})`,
+    );
+  } catch (error) {
+    try {
+      await simpleGit(targetPath).reset(["--hard", "HEAD"]);
+    } catch {
+      // Best-effort: the direct manifest restore below still runs
+      // regardless of whether this recovery step itself succeeded.
+    }
+    writeFileSync(manifestPath, originalManifestRaw, "utf8");
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `hatch remove: failed to drop harness "${harnessName}" (${message}) — nothing was changed.`,
+    );
+    return 1;
+  }
+
+  console.log(
+    `hatch remove: dropped harness "${harnessName}" — removed its placed content for ${itemsWithContent.length} item(s); remaining harness(es): ${newHarnesses.join(", ")}.`,
+  );
   return 0;
 }

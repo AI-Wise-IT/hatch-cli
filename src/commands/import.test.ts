@@ -9,6 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { hashEntries } from "../manifest-migrations/content-hash.js";
 
 vi.mock("../auth/credentials.js", () => ({
   resolveToken: vi.fn(),
@@ -1414,5 +1415,334 @@ describe("runImport — AF-13: first-time import of a removed target is blocked"
         join(target, ".claude", "skills", "removed-member", "SKILL.md"),
       ),
     ).toBe(true);
+  });
+});
+
+describe("runImport — AF-5: --add-harness backfill", () => {
+  function writeExistingManifest(
+    harnesses: string[],
+    skills: Record<string, unknown>,
+  ) {
+    writeFileSync(
+      join(target, "hatch.manifest.json"),
+      JSON.stringify({ schemaVersion: 3, harnesses, skills }, null, 2),
+      "utf8",
+    );
+  }
+
+  it("adds the harness to the manifest and backfills every standalone skill and group member, at their recorded versions, one commit", async () => {
+    writeExistingManifest(["claude"], {
+      "hatch-usage": { version: "1.0.0", contentHash: "placeholder-hash" },
+      a: {
+        version: "1.0.0",
+        group: "my-group",
+        contentHash: "placeholder-hash",
+      },
+      b: {
+        version: "1.0.0",
+        group: "my-group",
+        contentHash: "placeholder-hash",
+      },
+      "my-group": { version: "1.0.0" },
+    });
+
+    vi.mocked(registryFolderExists).mockImplementation(
+      async (_token, name) => ({ ok: true, exists: name === "hatch-usage" }),
+    );
+    vi.mocked(fetchRegistryFolder).mockImplementation(
+      async (_token, name, ref) => {
+        if (name === "hatch-usage") {
+          expect(ref).toBe("hatch-usage@1.0.0");
+          return { ok: true, files: skillFiles("1.0.0") };
+        }
+        if (name === "my-group") {
+          expect(ref).toBe("my-group@1.0.0");
+          return {
+            ok: true,
+            files: new Map([
+              [
+                "skill.json",
+                groupSkillJson("1.0.0", [
+                  { kind: "nested", name: "a" },
+                  { kind: "nested", name: "b" },
+                ]),
+              ],
+              ["a/SKILL.md", "# A"],
+              ["b/SKILL.md", "# B"],
+            ]),
+          };
+        }
+        throw new Error(`unexpected fetch of ${name}`);
+      },
+    );
+
+    const exitCode = await runImport([
+      "--add-harness",
+      "codex",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(
+        join(target, ".codex", "skills", "hatch-usage", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe("# Hatch Usage");
+    expect(
+      readFileSync(join(target, ".codex", "skills", "a", "SKILL.md"), "utf8"),
+    ).toBe("# A");
+    expect(
+      readFileSync(join(target, ".codex", "skills", "b", "SKILL.md"), "utf8"),
+    ).toBe("# B");
+
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.harnesses).toEqual(["claude", "codex"]);
+    // codex sorts after claude, so claude stays primary — its own placed
+    // content was never touched, so every existing contentHash is untouched.
+    expect(manifest.skills["hatch-usage"].contentHash).toBe("placeholder-hash");
+
+    const log = await simpleGit(target).log();
+    expect(log.total).toBe(1);
+    expect(log.latest?.message).toContain('add harness "codex"');
+  });
+
+  it("re-resolves the harness-suffixed variant fresh for the new harness, not a blind copy of an existing harness's placement", async () => {
+    writeExistingManifest(["codex"], {
+      "hatch-usage": { version: "1.0.0", contentHash: "placeholder-hash" },
+    });
+
+    vi.mocked(registryFolderExists).mockImplementation(
+      async (_token, name) => ({
+        ok: true,
+        exists: name === "hatch-usage-cld" || name === "hatch-usage",
+      }),
+    );
+    vi.mocked(fetchRegistryFolder).mockImplementation(async (_token, name) => {
+      if (name === "hatch-usage-cld") {
+        return { ok: true, files: skillFiles("1.0.0") };
+      }
+      return { ok: true, files: skillFiles("1.0.0") };
+    });
+
+    const exitCode = await runImport([
+      "--add-harness",
+      "claude",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(fetchRegistryFolder).toHaveBeenCalledWith(
+      "existing-session-token",
+      "hatch-usage-cld",
+      "hatch-usage@1.0.0",
+    );
+  });
+
+  it("recomputes contentHash against the new primary harness when the added harness becomes primary", async () => {
+    // codex is the sole (and thus primary) harness today; adding "claude"
+    // makes claude the new primary (alphabetically first).
+    writeExistingManifest(["codex"], {
+      "hatch-usage": { version: "1.0.0", contentHash: "placeholder-hash" },
+    });
+    vi.mocked(registryFolderExists).mockResolvedValue({
+      ok: true,
+      exists: true,
+    });
+    vi.mocked(fetchRegistryFolder).mockResolvedValue({
+      ok: true,
+      files: skillFiles("1.0.0"),
+    });
+
+    const exitCode = await runImport([
+      "--add-harness",
+      "claude",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(0);
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills["hatch-usage"].contentHash).not.toBe(
+      "placeholder-hash",
+    );
+    expect(manifest.skills["hatch-usage"].contentHash).toBe(
+      hashEntries([["SKILL.md", "# Hatch Usage"]]),
+    );
+  });
+
+  it("defaults to skipping a conflicting destination file when unattended, still completing the rest", async () => {
+    writeExistingManifest(["claude"], {
+      "hatch-usage": { version: "1.0.0", contentHash: "placeholder-hash" },
+    });
+    mkdirSync(join(target, ".codex", "skills", "hatch-usage"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(target, ".codex", "skills", "hatch-usage", "SKILL.md"),
+      "# Pre-existing, not placed by Hatch",
+      "utf8",
+    );
+
+    vi.mocked(registryFolderExists).mockResolvedValue({
+      ok: true,
+      exists: true,
+    });
+    vi.mocked(fetchRegistryFolder).mockResolvedValue({
+      ok: true,
+      files: skillFiles("1.0.0"),
+    });
+
+    const exitCode = await runImport([
+      "--add-harness",
+      "codex",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(
+        join(target, ".codex", "skills", "hatch-usage", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe("# Pre-existing, not placed by Hatch");
+    expect(consoleLogs.some((l) => l.includes("skipped"))).toBe(true);
+  });
+
+  it("aborts cleanly when a previously-imported skill has no resolvable folder for the new harness", async () => {
+    writeExistingManifest(["claude"], {
+      "hatch-usage": { version: "1.0.0", contentHash: "placeholder-hash" },
+    });
+    vi.mocked(registryFolderExists).mockResolvedValue({
+      ok: true,
+      exists: false,
+    });
+
+    const exitCode = await runImport([
+      "--add-harness",
+      "codex",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some((m) => m.includes("was not found in the registry")),
+    ).toBe(true);
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.harnesses).toEqual(["claude"]);
+    expect(existsSync(join(target, ".codex"))).toBe(false);
+  });
+
+  it("aborts cleanly when the registry can't be reached", async () => {
+    writeExistingManifest(["claude"], {
+      "hatch-usage": { version: "1.0.0", contentHash: "placeholder-hash" },
+    });
+    vi.mocked(registryFolderExists).mockResolvedValue({
+      ok: false,
+      reason: "unreachable",
+      detail: "could not reach the registry (network down)",
+    });
+
+    const exitCode = await runImport([
+      "--add-harness",
+      "codex",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(consoleErrors.some((m) => m.includes("registry unreachable"))).toBe(
+      true,
+    );
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.harnesses).toEqual(["claude"]);
+  });
+
+  it("no-ops when the harness is already added to the project", async () => {
+    writeExistingManifest(["claude", "codex"], {
+      "hatch-usage": { version: "1.0.0", contentHash: "placeholder-hash" },
+    });
+
+    const exitCode = await runImport([
+      "--add-harness",
+      "codex",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs.some((m) => m.includes("already added"))).toBe(true);
+    expect(fetchRegistryFolder).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unrecognized harness code", async () => {
+    writeExistingManifest(["claude"], {});
+
+    const exitCode = await runImport([
+      "--add-harness",
+      "bogus",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some((m) => m.includes('unrecognized harness "bogus"')),
+    ).toBe(true);
+  });
+
+  it("rejects when there is no manifest yet", async () => {
+    const exitCode = await runImport([
+      "--add-harness",
+      "claude",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some((m) => m.includes("no hatch.manifest.json found")),
+    ).toBe(true);
+  });
+
+  it("rejects combining --add-harness with a skill/group name", async () => {
+    const exitCode = await runImport([
+      "hatch-usage",
+      "--add-harness",
+      "codex",
+      "--path",
+      target,
+    ]);
+    expect(exitCode).toBe(1);
+    expect(consoleErrors.some((m) => m.includes("cannot be combined"))).toBe(
+      true,
+    );
+  });
+
+  it("rejects combining --add-harness with --harness", async () => {
+    const exitCode = await runImport([
+      "--add-harness",
+      "codex",
+      "--harness",
+      "claude",
+      "--path",
+      target,
+    ]);
+    expect(exitCode).toBe(1);
+    expect(consoleErrors.some((m) => m.includes("cannot be combined"))).toBe(
+      true,
+    );
   });
 });
