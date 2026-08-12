@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runCheckCollisions } from "./commands/check-collisions.js";
 import { runImport } from "./commands/import.js";
 import { runLogin } from "./commands/login.js";
 import { runNew } from "./commands/new.js";
@@ -25,6 +26,8 @@ if (!command) {
   process.exitCode = await runImport(rest);
 } else if (command === "remove") {
   process.exitCode = await runRemove(rest);
+} else if (command === "check-collisions") {
+  process.exitCode = await runCheckCollisions(rest);
 } else {
   console.error(`hatchcli: unknown command "${command}".`);
   process.exitCode = 1;

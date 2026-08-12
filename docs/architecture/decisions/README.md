@@ -25,3 +25,4 @@
 | 0021 | `0021-block-first-time-import-of-removed-target` | skill-registry-group-structure | accepted | [`0021-block-first-time-import-of-removed-target.md`](0021-block-first-time-import-of-removed-target.md) |
 | 0022 | `0022-remove-force-flags-not-prompt` | cli-remove-command | accepted | [`0022-remove-force-flags-not-prompt.md`](0022-remove-force-flags-not-prompt.md) |
 | 0023 | `0023-remove-harness-drop-unconditional` | cli-remove-command | accepted | [`0023-remove-harness-drop-unconditional.md`](0023-remove-harness-drop-unconditional.md) |
+| 0024 | `0024-registry-collision-predicate` | registry-collision-detection | accepted | [`0024-registry-collision-predicate.md`](0024-registry-collision-predicate.md) |

@@ -77,4 +77,5 @@ Expected result (first command run from the hatch-cli checkout, second from the 
 - Builds on [0001-harness-suffix-convention](0001-harness-suffix-convention.md) (the resolution algorithm and harness registry this check invokes) and [0013-registry-group-structure-and-permanence](0013-registry-group-structure-and-permanence.md) (name permanence, which keeps the CLI-side check's failure mode always remediable).
 - Amends [0007-github-actions-deployment](0007-github-actions-deployment.md) for the hatch-cli side: that record's "no external credentials" property is narrowed by this record's new CLI-side credential requirement. [0007](0007-github-actions-deployment.md) has been updated to cross-reference this record.
 - Implements the required status check [UC-5](../../use-cases/prevent-path-collisions.md) specifies for the skill-content repo.
+- Extended by [0024-registry-collision-predicate](0024-registry-collision-predicate.md), which settles the concrete collision predicate this record's required checks evaluate (left undefined here).
 - No known conflicting decision records.
