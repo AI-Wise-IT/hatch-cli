@@ -41,9 +41,18 @@ export interface Collision {
   sources: CollisionSource[];
 }
 
+export interface RegistryReadError {
+  folder: string;
+  detail: string;
+}
+
 export interface CollisionCheckResult {
   ok: boolean;
   collisions: Collision[];
+  // A folder whose skill.json couldn't be read/parsed at all (e.g.
+  // malformed JSON) — reported as its own actionable failure rather than
+  // crashing the whole check, since this runs unattended in CI.
+  errors: RegistryReadError[];
 }
 
 function listTopLevelRegistryFolders(registryPath: string): string[] {
@@ -91,13 +100,31 @@ export async function checkRegistryCollisions(
   }
 
   const standaloneFolders: string[] = [];
+  const errors: RegistryReadError[] = [];
 
   for (const folderName of topLevelFolders) {
-    const raw = readFileSync(
-      join(registryPath, folderName, "skill.json"),
-      "utf8",
-    );
-    const meta = parseGroupSkillJson(raw, folderName);
+    let meta: ReturnType<typeof parseGroupSkillJson>;
+    try {
+      // A UTF-8 BOM (common from some editors/shells, e.g. PowerShell's
+      // `Set-Content -Encoding utf8`) isn't valid JSON's first character —
+      // strip it before parsing. `BOM` is a one-character string holding
+      // code point U+FEFF (invisible in most editors/diffs).
+      const BOM = String.fromCharCode(0xfeff);
+      const raw = readFileSync(
+        join(registryPath, folderName, "skill.json"),
+        "utf8",
+      );
+      meta = parseGroupSkillJson(
+        raw.startsWith(BOM) ? raw.slice(BOM.length) : raw,
+        folderName,
+      );
+    } catch (error) {
+      errors.push({
+        folder: folderName,
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
 
     if (meta.members) {
       for (const member of meta.members) {
@@ -148,17 +175,31 @@ export async function checkRegistryCollisions(
   }
 
   collisions.sort((a, b) => a.destination.localeCompare(b.destination));
+  errors.sort((a, b) => a.folder.localeCompare(b.folder));
 
-  return { ok: collisions.length === 0, collisions };
+  return {
+    ok: collisions.length === 0 && errors.length === 0,
+    collisions,
+    errors,
+  };
 }
 
 export function formatCollisionReport(result: CollisionCheckResult): string {
   if (result.ok) {
     return "No destination-path collisions found.";
   }
-  const lines = [
-    `Found ${result.collisions.length} destination-path collision(s):`,
-  ];
+  const lines: string[] = [];
+  if (result.errors.length > 0) {
+    lines.push(`Could not read ${result.errors.length} registry folder(s):`);
+    for (const error of result.errors) {
+      lines.push(`  "${error.folder}": ${error.detail}`);
+    }
+  }
+  if (result.collisions.length > 0) {
+    lines.push(
+      `Found ${result.collisions.length} destination-path collision(s):`,
+    );
+  }
   for (const collision of result.collisions) {
     lines.push(
       `  "${collision.destination}" (harness(es): ${collision.harnesses.join(", ")}):`,

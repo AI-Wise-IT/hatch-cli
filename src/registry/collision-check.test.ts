@@ -136,18 +136,53 @@ describe("checkRegistryCollisions", () => {
     const result = await checkRegistryCollisions(dir);
     expect(result.ok).toBe(true);
   });
+
+  it("reports a malformed skill.json as an actionable error instead of throwing", async () => {
+    mkdirSync(join(dir, "broken"), { recursive: true });
+    writeFileSync(join(dir, "broken", "skill.json"), "{not valid json", "utf8");
+    const result = await checkRegistryCollisions(dir);
+    expect(result.ok).toBe(false);
+    expect(result.collisions).toEqual([]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]?.folder).toBe("broken");
+    expect(result.errors[0]?.detail).toContain("not valid JSON");
+  });
+
+  it("strips a UTF-8 BOM before parsing skill.json (e.g. PowerShell's Set-Content -Encoding utf8)", async () => {
+    mkdirSync(join(dir, "bom-fixture"), { recursive: true });
+    writeFileSync(
+      join(dir, "bom-fixture", "skill.json"),
+      `${String.fromCharCode(0xfeff)}${JSON.stringify({ version: "1.0.0" })}`,
+      "utf8",
+    );
+    const result = await checkRegistryCollisions(dir);
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("still detects real collisions alongside an unrelated malformed folder", async () => {
+    mkdirSync(join(dir, "broken"), { recursive: true });
+    writeFileSync(join(dir, "broken", "skill.json"), "not json", "utf8");
+    writeStandaloneSkill(dir, "helper");
+    writeGroup(dir, "toolkit", [{ kind: "nested", name: "helper" }]);
+    const result = await checkRegistryCollisions(dir);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toHaveLength(1);
+    expect(result.collisions).toHaveLength(1);
+  });
 });
 
 describe("formatCollisionReport", () => {
   it("reports a clean pass", () => {
-    expect(formatCollisionReport({ ok: true, collisions: [] })).toBe(
-      "No destination-path collisions found.",
-    );
+    expect(
+      formatCollisionReport({ ok: true, collisions: [], errors: [] }),
+    ).toBe("No destination-path collisions found.");
   });
 
   it("names the destination, harnesses, and every source on a collision", () => {
     const report = formatCollisionReport({
       ok: false,
+      errors: [],
       collisions: [
         {
           destination: "helper",
@@ -162,5 +197,15 @@ describe("formatCollisionReport", () => {
     expect(report).toContain('"helper"');
     expect(report).toContain("claude, codex");
     expect(report).toContain("toolkit/helper");
+  });
+
+  it("names the folder and reason on a read/parse error", () => {
+    const report = formatCollisionReport({
+      ok: false,
+      collisions: [],
+      errors: [{ folder: "broken", detail: "not valid JSON" }],
+    });
+    expect(report).toContain('"broken"');
+    expect(report).toContain("not valid JSON");
   });
 });
