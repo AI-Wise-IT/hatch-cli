@@ -64,7 +64,7 @@ The same conversation settled what happens to `_registry-integrity-fixture`, who
 - `_registry-integrity-fixture` is deleted once `check-name-permanence.mjs` has direct test coverage.
 - The project manifest gains `testProject`; `CURRENT_SCHEMA_VERSION` becomes 4. Every command that rewrites the manifest — `hatch import`, `hatch import --add-harness`, `hatch remove` — must carry the field across, since each rebuilds the manifest object from scratch.
 - `docs/pre-launch-audit.md`'s §5 artifact classification is superseded the moment this lands: the twelve fixtures stop being permanence-locked and become freely removable. The audit is a snapshot each run overwrites, so this is a re-run's job, not an edit.
-- A future registry discovery surface ([intake/backlog-0003](../../../intake/backlog-0003-registry-search-list.md)) has to decide whether testing skills appear in listings; this record settles only that they cannot be imported.
+- A registry discovery surface has to decide whether testing skills appear in listings; this record settles only that they cannot be imported. `openspec/changes/add-registry-listing/` takes that decision up, excluding them from an ordinary project's listing exactly as they are unimportable there.
 
 ## Agent Rules
 

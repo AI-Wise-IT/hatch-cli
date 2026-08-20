@@ -6,7 +6,7 @@
 
 "Which skill helps me write requirements?" finds nothing, because the skill is called `prd-elicitation` and the word *requirements* appears in its description, not its name. Substring matching over descriptions would not fix this either: the useful query is rarely a literal substring of the answer. The gap is between how someone describes what they want and how the content that does it happens to be named.
 
-This matters most for exactly the caller [backlog-0003](../../../intake/backlog-0003-registry-search-list.md) was written about. An agent working from a task description has a rich statement of intent and no knowledge of the registry's vocabulary — the case where meaning-based matching helps most and name matching helps least.
+This matters most for exactly the caller that prompted [`add-registry-listing`](../add-registry-listing/proposal.md): an agent working from a task description, with a rich statement of intent and no knowledge of the registry's vocabulary — the case where meaning-based matching helps most and name matching helps least.
 
 ## What Changes
 
