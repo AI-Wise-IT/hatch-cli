@@ -48,6 +48,7 @@ let tempParent: string;
 let target: string;
 let consoleErrors: string[];
 let consoleLogs: string[];
+let seededManifestRaw: string;
 
 function skillFiles(version = "1.0.0"): Map<string, string> {
   return new Map([
@@ -64,7 +65,30 @@ function setStdinTTY(value: boolean) {
   });
 }
 
-beforeEach(() => {
+// The manifest `hatch init` would have written. Every import runs against a
+// project that already has one — import never creates it.
+function seedManifest(
+  harnesses: string[],
+  skills: Record<string, unknown> = {},
+) {
+  seededManifestRaw = `${JSON.stringify({ schemaVersion: 3, harnesses, skills }, null, 2)}\n`;
+  writeFileSync(join(target, "hatch.manifest.json"), seededManifestRaw, "utf8");
+}
+
+// The "nothing was changed" half of an abort assertion: byte-for-byte, not
+// merely structurally, identical to what the project started with.
+function expectManifestUnchanged() {
+  expect(readFileSync(join(target, "hatch.manifest.json"), "utf8")).toBe(
+    seededManifestRaw,
+  );
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: assertions read ad-hoc manifest fields
+function readManifest(): Record<string, any> {
+  return JSON.parse(readFileSync(join(target, "hatch.manifest.json"), "utf8"));
+}
+
+beforeEach(async () => {
   tempParent = mkdtempSync(join(tmpdir(), "hatch-import-test-"));
   target = join(tempParent, "myproj");
   mkdirSync(target, { recursive: true });
@@ -109,6 +133,8 @@ beforeEach(() => {
     reason: "not-found",
     detail: "not found",
   });
+
+  await simpleGit(target).init();
 });
 
 afterEach(() => {
@@ -117,17 +143,11 @@ afterEach(() => {
 });
 
 describe("runImport — main flow", () => {
-  it("auto-inits git, places the skill per harness, writes the manifest, and commits once", async () => {
-    const exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude,codex",
-    ]);
+  it("places the skill per harness, writes the manifest, and commits once", async () => {
+    seedManifest(["claude", "codex"]);
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(0);
-    expect(existsSync(join(target, ".git"))).toBe(true);
     expect(
       readFileSync(
         join(target, ".claude", "skills", "hatch-usage", "SKILL.md"),
@@ -156,7 +176,7 @@ describe("runImport — main flow", () => {
     expect(log.total).toBe(1);
   });
 
-  it("does not require --harness and ignores it when a manifest already exists", async () => {
+  it("places into exactly the harnesses the manifest records, never the filesystem's", async () => {
     writeFileSync(
       join(target, "hatch.manifest.json"),
       JSON.stringify({
@@ -166,6 +186,8 @@ describe("runImport — main flow", () => {
       }),
       "utf8",
     );
+    // A stray harness folder on disk must not widen placement.
+    mkdirSync(join(target, ".codex", "skills"), { recursive: true });
 
     const exitCode = await runImport(["hatch-usage", "--path", target]);
 
@@ -173,7 +195,9 @@ describe("runImport — main flow", () => {
     expect(
       existsSync(join(target, ".claude", "skills", "hatch-usage", "SKILL.md")),
     ).toBe(true);
-    expect(existsSync(join(target, ".codex"))).toBe(false);
+    expect(existsSync(join(target, ".codex", "skills", "hatch-usage"))).toBe(
+      false,
+    );
   });
 
   it("resolves the harness-suffixed variant over the plain default, deploying under the plain name", async () => {
@@ -198,13 +222,8 @@ describe("runImport — main flow", () => {
       },
     );
 
-    const exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(fetchRegistryFolder).toHaveBeenCalledWith(
@@ -221,29 +240,165 @@ describe("runImport — main flow", () => {
   });
 });
 
-describe("runImport — manifest bootstrap (0015-import-harness-selection-flag)", () => {
-  it("requires --harness before authenticating when no manifest exists yet", async () => {
+describe("runImport — version control is optional", () => {
+  // The shared fixture is a repository root; these tests take that away.
+  function makeNonGit() {
+    rmSync(join(target, ".git"), { recursive: true, force: true });
+  }
+
+  it("creates no repository, and still places the content and updates the manifest", async () => {
+    makeNonGit();
+    seedManifest(["claude"]);
+
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(existsSync(join(target, ".git"))).toBe(false);
+    expect(
+      readFileSync(
+        join(target, ".claude", "skills", "hatch-usage", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe("# Hatch Usage");
+    expect(readManifest().skills["hatch-usage"].version).toBe("1.0.0");
+  });
+
+  it("attempts no commit at all when the project is not a repository", async () => {
+    makeNonGit();
+    seedManifest(["claude"]);
+    const commit = vi.fn();
+    vi.mocked(simpleGit).mockImplementationOnce(
+      () =>
+        ({
+          checkIsRepo: vi.fn().mockResolvedValue(false),
+          add: vi.fn(),
+          commit,
+          // biome-ignore lint/suspicious/noExplicitAny: minimal stub of simple-git's SimpleGit surface
+        }) as any,
+    );
+
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it("warns on every invocation, without changing a successful run's exit code", async () => {
+    makeNonGit();
+    mockStandaloneSkill(() => "1.0.0");
+    seedManifest(["claude"]);
+
+    const first = await runImport(["hatch-usage", "--path", target]);
+    const firstWarnings = consoleLogs.filter((m) =>
+      m.includes("not a git repository"),
+    ).length;
+    const second = await runImport(["hatch-usage", "--path", target]);
+    const totalWarnings = consoleLogs.filter((m) =>
+      m.includes("not a git repository"),
+    ).length;
+
+    expect(first).toBe(0);
+    expect(second).toBe(0);
+    expect(firstWarnings).toBe(1);
+    expect(totalWarnings).toBe(2);
+  });
+
+  it("warns at command entry, on a run that aborts before it would ever commit", async () => {
+    makeNonGit();
+    // No manifest at all: the run aborts at the precondition check, long
+    // before any commit could have happened.
     const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(1);
-    expect(consoleErrors.some((m) => m.includes("--harness"))).toBe(true);
-    expect(existsSync(join(target, ".git"))).toBe(false);
-    expect(resolveToken).not.toHaveBeenCalled();
+    expect(consoleLogs.some((m) => m.includes("not a git repository"))).toBe(
+      true,
+    );
   });
 
-  it("rejects an unrecognized harness before authenticating", async () => {
+  it("stays silent about version control in a repository root", async () => {
+    seedManifest(["claude"]);
+
+    await runImport(["hatch-usage", "--path", target]);
+
+    expect(consoleLogs.some((m) => m.includes("not a git repository"))).toBe(
+      false,
+    );
+  });
+});
+
+describe("runImport — a manifest is a precondition (0015-import-harness-selection-flag)", () => {
+  it("fails naming `hatch init` when the project has no manifest, changing and fetching nothing", async () => {
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some(
+        (m) =>
+          m.includes("no hatch.manifest.json found") &&
+          m.includes("hatch init"),
+      ),
+    ).toBe(true);
+    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expect(existsSync(join(target, ".claude"))).toBe(false);
+    expect(resolveToken).not.toHaveBeenCalled();
+    expect(fetchRegistryFolder).not.toHaveBeenCalled();
+  });
+
+  it("rejects --harness as an unrecognized argument", async () => {
     const exitCode = await runImport([
       "hatch-usage",
       "--path",
       target,
       "--harness",
-      "claude,notreal",
+      "claude",
     ]);
 
     expect(exitCode).toBe(1);
-    expect(consoleErrors.some((m) => m.includes("notreal"))).toBe(true);
-    expect(existsSync(join(target, ".git"))).toBe(false);
+    expect(
+      consoleErrors.some(
+        (m) => m.includes("unrecognized option") && m.includes("--harness"),
+      ),
+    ).toBe(true);
+    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expect(existsSync(join(target, ".claude"))).toBe(false);
     expect(resolveToken).not.toHaveBeenCalled();
+    expect(fetchRegistryFolder).not.toHaveBeenCalled();
+  });
+
+  it("rejects --harness even against an already-initialized project", async () => {
+    seedManifest(["claude"]);
+
+    const exitCode = await runImport([
+      "hatch-usage",
+      "--path",
+      target,
+      "--harness",
+      "codex",
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some(
+        (m) => m.includes("unrecognized option") && m.includes("--harness"),
+      ),
+    ).toBe(true);
+    expect(readManifest().harnesses).toEqual(["claude"]);
+    expect(fetchRegistryFolder).not.toHaveBeenCalled();
+  });
+
+  it("refuses a manifest that records no valid harnesses", async () => {
+    writeFileSync(
+      join(target, "hatch.manifest.json"),
+      JSON.stringify({ schemaVersion: 3, harnesses: [], skills: {} }),
+      "utf8",
+    );
+
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some((m) => m.includes("no valid harnesses recorded")),
+    ).toBe(true);
   });
 });
 
@@ -254,19 +409,14 @@ describe("runImport — skill not found for a declared harness", () => {
       exists: false,
     });
 
-    const exitCode = await runImport([
-      "nonexistent-skill",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["nonexistent-skill", "--path", target]);
 
     expect(exitCode).toBe(1);
     expect(
       consoleErrors.some((m) => m.includes("was not found in the registry")),
     ).toBe(true);
-    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expectManifestUnchanged();
     expect(fetchRegistryFolder).not.toHaveBeenCalled();
   });
 });
@@ -282,13 +432,8 @@ describe("runImport — AF-6: destination occupied", () => {
     preOccupyDestination();
     setStdinTTY(false);
 
-    const exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(promptLine).not.toHaveBeenCalled();
@@ -307,13 +452,8 @@ describe("runImport — AF-6: destination occupied", () => {
     setStdinTTY(true);
     vi.mocked(promptLine).mockResolvedValue("skip");
 
-    const exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(promptLine).toHaveBeenCalledTimes(1);
@@ -330,13 +470,8 @@ describe("runImport — AF-6: destination occupied", () => {
     setStdinTTY(true);
     vi.mocked(promptLine).mockResolvedValue("suffix");
 
-    const exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(
@@ -371,19 +506,14 @@ describe("runImport — AF-7: registry unreachable", () => {
       detail: "could not reach the registry (network down)",
     });
 
-    const exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(1);
     expect(consoleErrors.some((m) => m.includes("registry unreachable"))).toBe(
       true,
     );
-    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expectManifestUnchanged();
   });
 
   it("aborts when the fetch step can't reach the registry", async () => {
@@ -393,19 +523,14 @@ describe("runImport — AF-7: registry unreachable", () => {
       detail: "could not reach the registry (network down)",
     });
 
-    const exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(1);
     expect(consoleErrors.some((m) => m.includes("registry unreachable"))).toBe(
       true,
     );
-    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expectManifestUnchanged();
   });
 
   it("aborts when authentication itself can't reach the registry", async () => {
@@ -416,19 +541,14 @@ describe("runImport — AF-7: registry unreachable", () => {
       reason: "could not reach GitHub (network down)",
     });
 
-    const exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(1);
     expect(consoleErrors.some((m) => m.includes("registry unreachable"))).toBe(
       true,
     );
-    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expectManifestUnchanged();
     expect(writeCredentials).not.toHaveBeenCalled();
   });
 });
@@ -442,51 +562,67 @@ describe("runImport — AF-8: invalid password", () => {
       reason: "GitHub rejected the token as invalid or expired",
     });
 
-    const exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(1);
     expect(consoleErrors.some((m) => m.includes("invalid password"))).toBe(
       true,
     );
-    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expectManifestUnchanged();
     expect(writeCredentials).not.toHaveBeenCalled();
     expect(fetchRegistryFolder).not.toHaveBeenCalled();
   });
 });
 
 describe("runImport — rollback on partial failure", () => {
-  it("removes placed files and the newly-created manifest if the commit fails, leaving the project directory intact", async () => {
+  it("removes placed files and restores the manifest if the commit fails, leaving the project directory intact", async () => {
     vi.mocked(simpleGit).mockImplementationOnce(
       () =>
         ({
-          checkIsRepo: vi.fn().mockResolvedValue(false),
-          init: vi.fn().mockResolvedValue(undefined),
+          checkIsRepo: vi.fn().mockResolvedValue(true),
           add: vi.fn().mockResolvedValue(undefined),
           commit: vi.fn().mockRejectedValue(new Error("simulated git failure")),
           // biome-ignore lint/suspicious/noExplicitAny: minimal stub of simple-git's SimpleGit surface
         }) as any,
     );
 
-    const exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(1);
     expect(existsSync(target)).toBe(true);
     expect(
       existsSync(join(target, ".claude", "skills", "hatch-usage", "SKILL.md")),
     ).toBe(false);
-    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expectManifestUnchanged();
+  });
+
+  it("removes placed files and restores the manifest when placement fails in a non-git project", async () => {
+    seedManifest(["claude", "codex"]);
+    rmSync(join(target, ".git"), { recursive: true, force: true });
+    // Placement runs alphabetically. A *file* where codex's skill directory
+    // has to be created breaks the second harness's placement outright —
+    // this is not a destination-file conflict, so AF-6's skip/suffix
+    // handling never sees it.
+    mkdirSync(join(target, ".codex", "skills"), { recursive: true });
+    writeFileSync(
+      join(target, ".codex", "skills", "hatch-usage"),
+      "not a directory",
+      "utf8",
+    );
+
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    // Every file the command wrote is gone...
+    expect(
+      existsSync(join(target, ".claude", "skills", "hatch-usage", "SKILL.md")),
+    ).toBe(false);
+    // ...the manifest is byte-identical...
+    expectManifestUnchanged();
+    // ...and no repository was conjured up to recover with.
+    expect(existsSync(join(target, ".git"))).toBe(false);
   });
 });
 
@@ -532,13 +668,8 @@ describe("runImport — group import (0013, 0016)", () => {
       throw new Error(`unexpected fetch of ${name}`);
     });
 
-    const exitCode = await runImport([
-      "my-group",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["my-group", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(
@@ -638,13 +769,8 @@ describe("runImport — group import (0013, 0016)", () => {
       throw new Error(`unexpected fetch of ${name}`);
     });
 
-    const exitCode = await runImport([
-      "combo-group",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["combo-group", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(
@@ -735,13 +861,8 @@ describe("runImport — AF-9: pinned-pointer version conflict within a group", (
       },
     );
 
-    const exitCode = await runImport([
-      "conflict-group",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["conflict-group", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(
@@ -798,13 +919,8 @@ describe("runImport — AF-9: pinned-pointer version conflict within a group", (
       throw new Error(`unexpected fetch of ${name}`);
     });
 
-    const exitCode = await runImport([
-      "abort-group",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["abort-group", "--path", target]);
 
     expect(exitCode).toBe(1);
     expect(
@@ -813,7 +929,7 @@ describe("runImport — AF-9: pinned-pointer version conflict within a group", (
           m.includes("shared") && m.includes("1.9.0") && m.includes("2.0.0"),
       ),
     ).toBe(true);
-    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expectManifestUnchanged();
     expect(existsSync(join(target, ".claude", "skills", "shared"))).toBe(false);
   });
 });
@@ -837,7 +953,8 @@ function mockStandaloneSkill(getVersion: () => string) {
 describe("runImport — AF-1: re-import already up to date", () => {
   it("reports up to date, no changes, no commit", async () => {
     mockStandaloneSkill(() => "1.0.0");
-    await runImport(["hatch-usage", "--path", target, "--harness", "claude"]);
+    seedManifest(["claude"]);
+    await runImport(["hatch-usage", "--path", target]);
     const manifestBefore = readFileSync(
       join(target, "hatch.manifest.json"),
       "utf8",
@@ -863,7 +980,8 @@ describe("runImport — AF-2: re-import, update available, no local edits", () =
   it("fetches and places the newer compatible version, updates the manifest, and commits with a version-bump message", async () => {
     let version = "1.0.0";
     mockStandaloneSkill(() => version);
-    await runImport(["hatch-usage", "--path", target, "--harness", "claude"]);
+    seedManifest(["claude"]);
+    await runImport(["hatch-usage", "--path", target]);
     const logBefore = await simpleGit(target).log();
 
     version = "1.1.0";
@@ -885,7 +1003,8 @@ describe("runImport — AF-3: re-import, local edits present", () => {
   it("leaves locally-edited content untouched and reports local edits, even with a newer version available", async () => {
     let version = "1.0.0";
     mockStandaloneSkill(() => version);
-    await runImport(["hatch-usage", "--path", target, "--harness", "claude"]);
+    seedManifest(["claude"]);
+    await runImport(["hatch-usage", "--path", target]);
     const skillFile = join(
       target,
       ".claude",
@@ -917,7 +1036,8 @@ describe("runImport — AF-3: re-import, local edits present", () => {
 describe("runImport — AF-4: deprecated/removed skill detected", () => {
   it("surfaces a removed-flag warning for a previously-imported skill without blocking this run's primary operation", async () => {
     mockStandaloneSkill(() => "1.0.0");
-    await runImport(["hatch-usage", "--path", target, "--harness", "claude"]);
+    seedManifest(["claude"]);
+    await runImport(["hatch-usage", "--path", target]);
 
     vi.mocked(registryFolderExists).mockImplementation(
       async (_token, folderName) => ({
@@ -944,13 +1064,7 @@ describe("runImport — AF-4: deprecated/removed skill detected", () => {
     );
 
     consoleLogs.length = 0;
-    const exitCode = await runImport([
-      "other-skill",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    const exitCode = await runImport(["other-skill", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(
@@ -986,13 +1100,8 @@ describe("runImport — AF-10/AF-11/AF-12: standalone version pinning", () => {
       },
     );
 
-    const exitCode = await runImport([
-      "hatch-usage@1.0.0",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["hatch-usage@1.0.0", "--path", target]);
 
     expect(exitCode).toBe(0);
     const manifest = JSON.parse(
@@ -1007,13 +1116,8 @@ describe("runImport — AF-10/AF-11/AF-12: standalone version pinning", () => {
 
   it("AF-10: a bare re-import of a standing exact pin skips the update check entirely and leaves it untouched", async () => {
     mockStandaloneSkill(() => "1.0.0");
-    await runImport([
-      "hatch-usage@1.0.0",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    await runImport(["hatch-usage@1.0.0", "--path", target]);
     const manifestBefore = readFileSync(
       join(target, "hatch.manifest.json"),
       "utf8",
@@ -1040,13 +1144,8 @@ describe("runImport — AF-10/AF-11/AF-12: standalone version pinning", () => {
     let version = "1.0.0";
     mockStandaloneSkill(() => version);
 
-    let exitCode = await runImport([
-      "hatch-usage@^1.0.0",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    let exitCode = await runImport(["hatch-usage@^1.0.0", "--path", target]);
     expect(exitCode).toBe(0);
     let manifest = JSON.parse(
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
@@ -1076,13 +1175,8 @@ describe("runImport — AF-10/AF-11/AF-12: standalone version pinning", () => {
     let version = "1.0.0";
     mockStandaloneSkill(() => version);
 
-    await runImport([
-      "hatch-usage@1.0.0",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    await runImport(["hatch-usage@1.0.0", "--path", target]);
 
     version = "1.1.0";
     let exitCode = await runImport(["hatch-usage@latest", "--path", target]);
@@ -1136,7 +1230,8 @@ describe("runImport — Batch 7: group re-import", () => {
       },
     );
 
-    await runImport(["my-group", "--path", target, "--harness", "claude"]);
+    seedManifest(["claude"]);
+    await runImport(["my-group", "--path", target]);
     const logBefore = await simpleGit(target).log();
 
     groupVersion = "1.1.0";
@@ -1193,7 +1288,8 @@ describe("runImport — Batch 7: group re-import", () => {
       },
     );
 
-    await runImport(["my-group", "--path", target, "--harness", "claude"]);
+    seedManifest(["claude"]);
+    await runImport(["my-group", "--path", target]);
     writeFileSync(
       join(target, ".claude", "skills", "a", "SKILL.md"),
       "edited locally",
@@ -1236,13 +1332,8 @@ describe("runImport — registry-only files are never deployed", () => {
       ]),
     });
 
-    const exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(
@@ -1271,13 +1362,8 @@ describe("runImport — AF-13: first-time import of a removed target is blocked"
       return { ok: false, reason: "not-found", detail: "not found" };
     });
 
-    const exitCode = await runImport([
-      "gone-skill",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["gone-skill", "--path", target]);
 
     expect(exitCode).toBe(1);
     expect(
@@ -1285,7 +1371,7 @@ describe("runImport — AF-13: first-time import of a removed target is blocked"
         (m) => m.includes("gone-skill") && m.includes("removed"),
       ),
     ).toBe(true);
-    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expectManifestUnchanged();
     expect(fetchRegistryFolder).not.toHaveBeenCalled();
   });
 
@@ -1304,13 +1390,8 @@ describe("runImport — AF-13: first-time import of a removed target is blocked"
       return { ok: false, reason: "not-found", detail: "not found" };
     });
 
-    const exitCode = await runImport([
-      "gone-group",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["gone-group", "--path", target]);
 
     expect(exitCode).toBe(1);
     expect(
@@ -1318,7 +1399,7 @@ describe("runImport — AF-13: first-time import of a removed target is blocked"
         (m) => m.includes("gone-group") && m.includes("removed"),
       ),
     ).toBe(true);
-    expect(existsSync(join(target, "hatch.manifest.json"))).toBe(false);
+    expectManifestUnchanged();
   });
 
   it("does not block a re-import of something already in the manifest that later became removed (AF-4 still applies, warn-only)", async () => {
@@ -1333,13 +1414,8 @@ describe("runImport — AF-13: first-time import of a removed target is blocked"
       return { ok: false, reason: "not-found", detail: "not found" };
     });
 
-    let exitCode = await runImport([
-      "hatch-usage",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    let exitCode = await runImport(["hatch-usage", "--path", target]);
     expect(exitCode).toBe(0);
 
     removed = true;
@@ -1401,13 +1477,8 @@ describe("runImport — AF-13: first-time import of a removed target is blocked"
       },
     );
 
-    const exitCode = await runImport([
-      "fine-group",
-      "--path",
-      target,
-      "--harness",
-      "claude",
-    ]);
+    seedManifest(["claude"]);
+    const exitCode = await runImport(["fine-group", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(
@@ -1703,7 +1774,7 @@ describe("runImport — AF-5: --add-harness backfill", () => {
     ).toBe(true);
   });
 
-  it("rejects when there is no manifest yet", async () => {
+  it("rejects when there is no manifest yet, naming `hatch init` as the remedy", async () => {
     const exitCode = await runImport([
       "--add-harness",
       "claude",
@@ -1713,7 +1784,11 @@ describe("runImport — AF-5: --add-harness backfill", () => {
 
     expect(exitCode).toBe(1);
     expect(
-      consoleErrors.some((m) => m.includes("no hatch.manifest.json found")),
+      consoleErrors.some(
+        (m) =>
+          m.includes("no hatch.manifest.json found") &&
+          m.includes("hatch init"),
+      ),
     ).toBe(true);
   });
 
@@ -1722,21 +1797,6 @@ describe("runImport — AF-5: --add-harness backfill", () => {
       "hatch-usage",
       "--add-harness",
       "codex",
-      "--path",
-      target,
-    ]);
-    expect(exitCode).toBe(1);
-    expect(consoleErrors.some((m) => m.includes("cannot be combined"))).toBe(
-      true,
-    );
-  });
-
-  it("rejects combining --add-harness with --harness", async () => {
-    const exitCode = await runImport([
-      "--add-harness",
-      "codex",
-      "--harness",
-      "claude",
       "--path",
       target,
     ]);

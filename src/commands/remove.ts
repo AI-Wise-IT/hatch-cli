@@ -1,9 +1,14 @@
 // `hatch remove` (UC-4): removes a previously-imported standalone skill, or
 // a whole group, from an existing project — deleting its placed content
 // from every declared harness folder, dropping its manifest entry/entries,
-// and committing once. Also removes a whole harness (`--harness <name>`),
-// dropping its placed content for every already-imported skill/group and
-// the harness itself from the manifest.
+// and committing once when the project is version-controlled. Also removes
+// a whole harness (`--harness <name>`), dropping its placed content for
+// every already-imported skill/group and the harness itself from the
+// manifest.
+//
+// Both paths snapshot what they are about to delete before deleting it, and
+// restore from that snapshot on failure — the "nothing was changed"
+// guarantee holds whether or not the project has a repository.
 // Batch 8 scope: UC-4 main flow, AF-1 (not imported), AF-2 (manifest/disk
 // drift), AF-3 (local edits present), AF-4 (target is a skill belonging to
 // a group — refused, the group is named instead).
@@ -26,13 +31,21 @@
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { simpleGit } from "simple-git";
 import { getHarnessDefinition, isKnownHarness } from "../harness-registry.js";
 import {
   diskTreeIsEmpty,
   hashDiskTree,
 } from "../manifest-migrations/content-hash.js";
 import { migrateManifest } from "../manifest-migrations/index.js";
+import {
+  createSnapshot,
+  restoreSnapshot,
+  snapshotTree,
+} from "../project/file-snapshot.js";
+import {
+  type VersionControl,
+  openVersionControl,
+} from "../project/version-control.js";
 
 interface ParsedArgs {
   // Exactly one of targetName/harnessName is set — parseArgs enforces this.
@@ -165,8 +178,13 @@ export async function runRemove(argv: string[]): Promise<number> {
     return 1;
   }
 
+  // Resolved at entry, before any mutation — a removal in a project with no
+  // version control has no recovery point beyond this command's own
+  // rollback, and the developer is told so before it proceeds.
+  const vc = await openVersionControl("hatch remove", targetPath);
+
   if (harnessName !== undefined) {
-    return runDropHarness(harnessName, targetPath);
+    return runDropHarness(harnessName, targetPath, vc);
   }
   const name = targetName as string;
 
@@ -295,6 +313,19 @@ export async function runRemove(argv: string[]): Promise<number> {
   const groupFullyRemoved =
     isGroup && memberNames.every((n) => removedNames.has(n));
 
+  // Everything about to be deleted, held in memory so this command can put
+  // it back itself — the guarantee holds with or without a repository.
+  const snapshot = createSnapshot();
+  for (const item of itemsToRemove) {
+    for (const harness of sortedHarnesses) {
+      snapshotTree(
+        targetPath,
+        join(targetPath, getHarnessDefinition(harness).skillsDir, item.name),
+        snapshot,
+      );
+    }
+  }
+
   try {
     for (const item of itemsToRemove) {
       for (const harness of sortedHarnesses) {
@@ -324,21 +355,14 @@ export async function runRemove(argv: string[]): Promise<number> {
       "utf8",
     );
 
-    const git = simpleGit(targetPath);
-    await git.add(".");
     const commitMessage = isGroup
       ? groupFullyRemoved
         ? `hatch remove: remove group "${name}" (${itemsToRemove.length} member${itemsToRemove.length === 1 ? "" : "s"})`
         : `hatch remove: remove ${itemsToRemove.length} member(s) of group "${name}"`
       : `hatch remove: remove "${name}"`;
-    await git.commit(commitMessage);
+    await vc.commit(commitMessage);
   } catch (error) {
-    try {
-      await simpleGit(targetPath).reset(["--hard", "HEAD"]);
-    } catch {
-      // Best-effort: the direct manifest restore below still runs
-      // regardless of whether this recovery step itself succeeded.
-    }
+    restoreSnapshot(targetPath, snapshot);
     writeFileSync(manifestPath, originalManifestRaw, "utf8");
     const message = error instanceof Error ? error.message : String(error);
     console.error(
@@ -387,6 +411,7 @@ export async function runRemove(argv: string[]): Promise<number> {
 async function runDropHarness(
   harnessName: string,
   targetPath: string,
+  vc: VersionControl,
 ): Promise<number> {
   const manifestPath = join(targetPath, "hatch.manifest.json");
   if (!existsSync(manifestPath)) {
@@ -460,6 +485,17 @@ async function runDropHarness(
 
   const newSkills: Record<string, SkillEntry> = { ...skills };
 
+  // Every file this drop is about to delete, so a mid-operation failure is
+  // recoverable without a repository.
+  const snapshot = createSnapshot();
+  for (const itemName of itemsWithContent) {
+    snapshotTree(
+      targetPath,
+      join(targetPath, getHarnessDefinition(harnessName).skillsDir, itemName),
+      snapshot,
+    );
+  }
+
   try {
     for (const itemName of itemsWithContent) {
       rmSync(
@@ -504,18 +540,11 @@ async function runDropHarness(
       "utf8",
     );
 
-    const git = simpleGit(targetPath);
-    await git.add(".");
-    await git.commit(
+    await vc.commit(
       `hatch remove: drop harness "${harnessName}" (${itemsWithContent.length} item${itemsWithContent.length === 1 ? "" : "s"})`,
     );
   } catch (error) {
-    try {
-      await simpleGit(targetPath).reset(["--hard", "HEAD"]);
-    } catch {
-      // Best-effort: the direct manifest restore below still runs
-      // regardless of whether this recovery step itself succeeded.
-    }
+    restoreSnapshot(targetPath, snapshot);
     writeFileSync(manifestPath, originalManifestRaw, "utf8");
     const message = error instanceof Error ? error.message : String(error);
     console.error(

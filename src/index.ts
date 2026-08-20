@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCheckCollisions } from "./commands/check-collisions.js";
 import { runImport } from "./commands/import.js";
+import { runInit } from "./commands/init.js";
 import { runLogin } from "./commands/login.js";
-import { runNew } from "./commands/new.js";
 import { runRemove } from "./commands/remove.js";
 
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -20,8 +20,8 @@ if (!command) {
   console.log(`hatchcli ${version}`);
 } else if (command === "login") {
   process.exitCode = await runLogin();
-} else if (command === "new") {
-  process.exitCode = await runNew(rest);
+} else if (command === "init") {
+  process.exitCode = await runInit(rest);
 } else if (command === "import") {
   process.exitCode = await runImport(rest);
 } else if (command === "remove") {

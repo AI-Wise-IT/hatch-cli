@@ -12,10 +12,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hashDiskTree } from "../manifest-migrations/content-hash.js";
 
 // Wraps the real simpleGit so tests exercise real git plumbing by default;
-// only the rollback test overrides it to simulate a mid-operation failure.
+// only the rollback tests override it to simulate a mid-operation failure.
 vi.mock("simple-git", async (importOriginal) => {
   const actual = await importOriginal<typeof import("simple-git")>();
   return { ...actual, simpleGit: vi.fn(actual.simpleGit) };
+});
+// Likewise for the filesystem: real by default, so the rollback tests can
+// break one write without a repository being involved at all.
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return { ...actual, writeFileSync: vi.fn(actual.writeFileSync) };
 });
 
 const { simpleGit } = await import("simple-git");
@@ -643,20 +649,87 @@ describe("runRemove — argument handling", () => {
 });
 
 describe("runRemove — rollback on partial failure", () => {
-  it("restores deleted content and the manifest if the commit fails", async () => {
-    const hash = placeSkill(".claude", "hatch-usage", {
-      "SKILL.md": "# Hatch Usage",
-    });
-    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } });
-    await commitAll("seed");
+  // Non-text payload, so "restored byte-for-byte" means exactly that.
+  const BINARY = Buffer.from([0x00, 0x01, 0xfe, 0xff, 0x00, 0x7f]);
 
-    const realGit = simpleGit(target);
+  // A skill with the nested payload folders a skill is allowed to carry,
+  // placed under both declared harnesses.
+  function placeRichSkill(): void {
+    for (const harnessDir of [".claude", ".codex"]) {
+      const dir = join(target, harnessDir, "skills", "hatch-usage");
+      mkdirSync(join(dir, "references", "deep"), { recursive: true });
+      mkdirSync(join(dir, "assets"), { recursive: true });
+      writeFileSync(join(dir, "SKILL.md"), "# Hatch Usage", "utf8");
+      writeFileSync(
+        join(dir, "references", "deep", "notes.md"),
+        "reference notes",
+        "utf8",
+      );
+      writeFileSync(join(dir, "assets", "logo.png"), BINARY);
+    }
+  }
+
+  function expectFullyRestored(): void {
+    for (const harnessDir of [".claude", ".codex"]) {
+      const dir = join(target, harnessDir, "skills", "hatch-usage");
+      expect(readFileSync(join(dir, "SKILL.md"), "utf8")).toBe("# Hatch Usage");
+      expect(
+        readFileSync(join(dir, "references", "deep", "notes.md"), "utf8"),
+      ).toBe("reference notes");
+      expect(readFileSync(join(dir, "assets", "logo.png")).equals(BINARY)).toBe(
+        true,
+      );
+    }
+  }
+
+  it("restores every deleted file and the manifest when removal fails in a non-git project", async () => {
+    rmSync(join(target, ".git"), { recursive: true, force: true });
+    placeRichSkill();
+    const hash = hashDiskTree(join(target, ".claude", "skills", "hatch-usage"));
+    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } }, [
+      "claude",
+      "codex",
+    ]);
+    const manifestBefore = readFileSync(
+      join(target, "hatch.manifest.json"),
+      "utf8",
+    );
+    // The manifest write that follows deletion fails — no git anywhere in
+    // sight, so only the command's own snapshot can undo this.
+    vi.mocked(writeFileSync).mockImplementationOnce(() => {
+      throw new Error("simulated disk failure");
+    });
+
+    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expectFullyRestored();
+    expect(readFileSync(join(target, "hatch.manifest.json"), "utf8")).toBe(
+      manifestBefore,
+    );
+    expect(existsSync(join(target, ".git"))).toBe(false);
+  });
+
+  it("restores every deleted file and the manifest, making no commit, when removal fails in a git project", async () => {
+    placeRichSkill();
+    const hash = hashDiskTree(join(target, ".claude", "skills", "hatch-usage"));
+    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } }, [
+      "claude",
+      "codex",
+    ]);
+    await commitAll("seed");
+    const manifestBefore = readFileSync(
+      join(target, "hatch.manifest.json"),
+      "utf8",
+    );
+    const logBefore = await simpleGit(target).log();
+
     vi.mocked(simpleGit).mockImplementationOnce(
       () =>
         ({
+          checkIsRepo: vi.fn().mockResolvedValue(true),
           add: vi.fn().mockResolvedValue(undefined),
           commit: vi.fn().mockRejectedValue(new Error("simulated git failure")),
-          reset: realGit.reset.bind(realGit),
           // biome-ignore lint/suspicious/noExplicitAny: minimal stub of simple-git's SimpleGit surface
         }) as any,
     );
@@ -664,15 +737,134 @@ describe("runRemove — rollback on partial failure", () => {
     const exitCode = await runRemove(["hatch-usage", "--path", target]);
 
     expect(exitCode).toBe(1);
-    expect(
-      readFileSync(
-        join(target, ".claude", "skills", "hatch-usage", "SKILL.md"),
-        "utf8",
-      ),
-    ).toBe("# Hatch Usage");
+    expectFullyRestored();
+    expect(readFileSync(join(target, "hatch.manifest.json"), "utf8")).toBe(
+      manifestBefore,
+    );
+    const logAfter = await simpleGit(target).log();
+    expect(logAfter.total).toBe(logBefore.total);
+  });
+
+  it("restores a dropped harness's content when --harness fails partway", async () => {
+    rmSync(join(target, ".git"), { recursive: true, force: true });
+    placeRichSkill();
+    writeManifest({ "hatch-usage": { version: "1.0.0" } }, ["claude", "codex"]);
+    const manifestBefore = readFileSync(
+      join(target, "hatch.manifest.json"),
+      "utf8",
+    );
+    vi.mocked(writeFileSync).mockImplementationOnce(() => {
+      throw new Error("simulated disk failure");
+    });
+
+    const exitCode = await runRemove(["--harness", "codex", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expectFullyRestored();
+    expect(readFileSync(join(target, "hatch.manifest.json"), "utf8")).toBe(
+      manifestBefore,
+    );
+  });
+});
+
+describe("runRemove — version control is optional", () => {
+  function makeNonGit() {
+    rmSync(join(target, ".git"), { recursive: true, force: true });
+  }
+
+  it("removes the content and updates the manifest with no commit attempted", async () => {
+    makeNonGit();
+    const hash = placeSkill(".claude", "hatch-usage", {
+      "SKILL.md": "# Hatch Usage",
+    });
+    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } });
+    const commit = vi.fn();
+    vi.mocked(simpleGit).mockImplementationOnce(
+      () =>
+        ({
+          checkIsRepo: vi.fn().mockResolvedValue(false),
+          add: vi.fn(),
+          commit,
+          // biome-ignore lint/suspicious/noExplicitAny: minimal stub of simple-git's SimpleGit surface
+        }) as any,
+    );
+
+    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(commit).not.toHaveBeenCalled();
+    expect(existsSync(join(target, ".claude", "skills", "hatch-usage"))).toBe(
+      false,
+    );
     const manifest = JSON.parse(
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
-    expect(manifest.skills["hatch-usage"]).toBeDefined();
+    expect(manifest.skills["hatch-usage"]).toBeUndefined();
+  });
+
+  it("warns before a --force-all removal proceeds", async () => {
+    makeNonGit();
+    placeSkill(".claude", "hatch-usage", { "SKILL.md": "# edited locally" });
+    writeManifest({
+      "hatch-usage": { version: "1.0.0", contentHash: "sha256:stale" },
+    });
+
+    const exitCode = await runRemove([
+      "hatch-usage",
+      "--path",
+      target,
+      "--force-all",
+    ]);
+
+    expect(exitCode).toBe(0);
+    const warningIndex = consoleLogs.findIndex((m) =>
+      m.includes("not a git repository"),
+    );
+    const removalIndex = consoleLogs.findIndex((m) => m.includes("removed"));
+    expect(warningIndex).toBeGreaterThanOrEqual(0);
+    // The warning lands before the removal reports itself done — it exists
+    // to be read while the operation is still avoidable.
+    expect(warningIndex).toBeLessThan(removalIndex);
+    expect(existsSync(join(target, ".claude", "skills", "hatch-usage"))).toBe(
+      false,
+    );
+  });
+
+  it("warns on a run that aborts before it would ever commit", async () => {
+    makeNonGit();
+    const hash = placeSkill(".claude", "hatch-usage", {
+      "SKILL.md": "# Hatch Usage",
+    });
+    writeManifest(
+      {
+        "hatch-usage": {
+          version: "1.0.0",
+          contentHash: hash,
+          group: "my-group",
+        },
+      },
+      ["claude"],
+    );
+
+    // A group member is refused outright, long before any commit.
+    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expect(consoleLogs.some((m) => m.includes("not a git repository"))).toBe(
+      true,
+    );
+  });
+
+  it("stays silent about version control in a repository root", async () => {
+    const hash = placeSkill(".claude", "hatch-usage", {
+      "SKILL.md": "# Hatch Usage",
+    });
+    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } });
+
+    await runRemove(["hatch-usage", "--path", target]);
+
+    expect(consoleLogs.some((m) => m.includes("not a git repository"))).toBe(
+      false,
+    );
   });
 });
