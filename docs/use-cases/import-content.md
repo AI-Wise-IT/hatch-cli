@@ -5,7 +5,7 @@
 - **ID:** UC-3
 - **Name:** Import Skill/Group Content into a Project
 - **Primary Actor:** Developer (including a cloud agent acting unattended on the developer's behalf)
-- **Outcome:** The named skill or group is present in the target project — correctly placed per the project's declared harness(es), recorded in the manifest, and committed as its own reviewable change. Covers first-time import, re-import (update/no-op/local-edit protection/pin-respecting), optionally pinning an exact or floor version, and adding a harness to a project already using Hatch. Works against any existing project, not only ones created by `hatch new`.
+- **Outcome:** The named skill or group is present in the target project — correctly placed per the project's declared harness(es), recorded in the manifest, and committed as its own reviewable change. Covers first-time import, re-import (update/no-op/local-edit protection/pin-respecting), optionally pinning an exact or floor version, and adding a harness to a project already using Hatch. Works against any project that `hatch init` has initialized, however that project was originally created.
 
 ## Preconditions
 
@@ -15,7 +15,7 @@
 ## Main Success Scenario
 
 1. Developer/agent runs `hatch import <skill-or-group-name>[@<version>]` against a target project directory — optionally pinning an exact version (`@1.2.0`) or a range floor (`@^1.2.0`).
-2. System checks whether the target is already a git repository; if not, initializes one.
+2. System checks whether the target project has a manifest; if not, it aborts and names `hatch init`. It also notes whether the project is a git repository root, warning if it isn't.
 3. System checks for an authenticated session; if none exists, prompts inline for the registry password and authenticates.
 4. System fetches the named skill — or, if it's a group, the whole group atomically — from the registry, at the given version if one was pinned, otherwise at the latest compatible version.
 5. System checks each destination path the content would occupy is not already taken by something Hatch didn't place there.
@@ -121,6 +121,7 @@ Triggered at step 4 when the named target — a standalone skill or a group, whi
 ## Business Rules
 
 - One `hatch import` invocation produces at most one commit, deterministic and reviewable, regardless of how many files or skills it touches (single skill, whole group, or harness backfill).
+- Every reference to committing here applies when the project is a git repository root. Hatch never creates a repository; without one it does the same work, skips the commit, and warns — see [0026-git-optional-dependency](../architecture/decisions/0026-git-optional-dependency.md). The "no changes are made" guarantees hold either way, restored by the command itself rather than by any version-control operation.
 - A group is always fetched and imported as a whole — never one skill out of a group individually.
 - A group's members may be physically part of the group's own folder, or a named pointer to a skill (or another group) living elsewhere in the registry, optionally pinned to an exact version (see ADR-0013). Deployment always unpacks a group into flat, individual entries in the target project — never as one nested group folder.
 - A pinned-pointer version conflict within one import is resolved deterministically, never silently guessed: highest pinned version wins with a warning when the conflicting versions share a MAJOR version; the whole import is blocked otherwise (see AF-9).

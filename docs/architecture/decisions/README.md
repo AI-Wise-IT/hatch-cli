@@ -27,3 +27,4 @@
 | 0023 | `0023-remove-harness-drop-unconditional` | cli-remove-command | accepted | [`0023-remove-harness-drop-unconditional.md`](0023-remove-harness-drop-unconditional.md) |
 | 0024 | `0024-registry-collision-predicate` | registry-collision-detection | accepted | [`0024-registry-collision-predicate.md`](0024-registry-collision-predicate.md) |
 | 0025 | `0025-harness-shadowing-risk-accepted` | registry-collision-detection | accepted | [`0025-harness-shadowing-risk-accepted.md`](0025-harness-shadowing-risk-accepted.md) |
+| 0026 | `0026-git-optional-dependency` | version-control-integration | accepted | [`0026-git-optional-dependency.md`](0026-git-optional-dependency.md) |

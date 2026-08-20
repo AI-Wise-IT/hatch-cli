@@ -4,7 +4,7 @@ Decision record from the MVP-scoping step, based on `intake/product-requirements
 
 ## Confirmed in-scope goals
 
-- **[Bootstrap a New Project](../docs/use-cases/bootstrap-new-project.md)** (UC-1) — `hatch new` scaffolds a project at a chosen location, authenticates, initializes git, records harness selection(s) in the manifest, imports a fixed self-documentation skill (new — added during this step, not in the original PRD) so any agent knows how to use Hatch from the start, and commits it all as one initial commit.
+- **[Initialize a Project for Hatch](../docs/use-cases/bootstrap-new-project.md)** (UC-1) — `hatch init` makes an existing directory Hatch-managed: authenticates, records harness selection(s) in the manifest, and imports a fixed self-documentation skill (new — added during this step, not in the original PRD) so any agent knows how to use Hatch from the start.
 - **[Authenticate to the Registry](../docs/use-cases/authenticate-to-registry.md)** (UC-2) — `hatch login` authenticates against the whole registry (private in full, single shared password, no public/private split) for use by subsequent commands.
 - **[Import Skill/Group Content into a Project](../docs/use-cases/import-content.md)** (UC-3) — `hatch import` fetches a skill or group (never a recipe — see exclusions) into any existing project, handling first-time import, update-to-latest-compatible, local-edit protection, deprecation warnings, harness placement/backfill, and destination-path conflicts.
 - **[Remove Content from a Project](../docs/use-cases/remove-content.md)** (UC-4) — `hatch remove` cleanly removes a previously-imported skill, group, or harness, protecting local edits and manifest/disk consistency.
@@ -41,4 +41,4 @@ The user judged recipes as unlikely to be used soon and as needing further desig
 - Gating `hatch import` on "no uncommitted changes" in the target project.
 - A pre-commit hook installed into every target project.
 - Scriptable/JSON output from `hatch import` — human-readable text stays sufficient for now.
-- Auto-detecting whether a target is a brand-new vs. existing project — handled explicitly via the distinct `hatch new` command instead.
+- Auto-detecting whether a target is already Hatch-managed — handled explicitly via the distinct `hatch init` command instead.

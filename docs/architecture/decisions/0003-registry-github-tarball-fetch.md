@@ -12,11 +12,11 @@
 
 The skill-content registry is a single private GitHub repository, with flat top-level skill/group folders per [0001-harness-suffix-convention](0001-harness-suffix-convention.md). Hatch CLI fetches named content by calling GitHub's contents/tarball API for the specific skill or group subdirectory being requested, extracting only that subtree. The CLI never performs a full `git clone` of the registry repo, and never persists fetched content beyond the single import operation it was fetched for — no local caching of registry content, per the PRD's "No" list.
 
-The per-project manifest that `hatch new` and `hatch import` write and update is a JSON file, `hatch.manifest.json`, at the target project's root.
+The per-project manifest that `hatch init` creates and `hatch import` updates is a JSON file, `hatch.manifest.json`, at the target project's root.
 
 ## Context
 
-ADR 0001 already fixed the registry's on-disk shape (flat, suffix-based skill folders). This record decides how `hatch import`/`hatch new` reach that content over the network. The PRD's Constraints require registry access to be "reachable over the open internet, gated by a single personal password" without building "a public, multi-user app with account management," and its Context states that if the system sits untouched for six months, "the main foreseeable risk is credential expiry" — implying no second system (a custom server) should need to be kept alive. The PRD's "No" list explicitly rules out local caching of fetched content. [0002-cli-runtime-nodejs](0002-cli-runtime-nodejs.md) settled Node.js/TypeScript as the CLI runtime in the same conversation, which this decision builds on.
+ADR 0001 already fixed the registry's on-disk shape (flat, suffix-based skill folders). This record decides how `hatch import`/`hatch init` reach that content over the network. The PRD's Constraints require registry access to be "reachable over the open internet, gated by a single personal password" without building "a public, multi-user app with account management," and its Context states that if the system sits untouched for six months, "the main foreseeable risk is credential expiry" — implying no second system (a custom server) should need to be kept alive. The PRD's "No" list explicitly rules out local caching of fetched content. [0002-cli-runtime-nodejs](0002-cli-runtime-nodejs.md) settled Node.js/TypeScript as the CLI runtime in the same conversation, which this decision builds on.
 
 Current practice for "pull one named subdirectory from a private repo into another repo without a full clone" is a well-established idiom (tools such as `giget`/`degit`) built on GitHub's tarball/contents API with token auth — directly fitting the shape of a per-skill or per-group fetch.
 

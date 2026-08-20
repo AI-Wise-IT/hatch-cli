@@ -50,7 +50,7 @@ The three harnesses in scope today are Claude, Codex, and Cursor, with abbreviat
 - `hatch import`'s resolution logic must implement "prefer `<name>-<H-code>/`, else `<name>/`, else unavailable" for its target harness, reading `<H-code>` from the harness registry, and must strip the harness-code suffix at deployment time.
 - The registry's "no duplicate destination path" publish lint must be extended to flag any skill name ending in a code from the harness registry's reserved set, for human review before publishing, whether or not it's an intentional variant.
 - Tessl will grade and list each harness-suffixed family member as a fully independent registry entry with no merged identity — accepted and confirmed by the developer.
-- How Hatch's own project-level manifest records which harness(es) a project uses is now settled by [0015-import-harness-selection-flag](0015-import-harness-selection-flag.md) (an explicit `--harness` flag on `hatch import`, mirroring `hatch new`'s). How a new harness would be onboarded end-to-end remains open for a later decision if needed.
+- How Hatch's own project-level manifest records which harness(es) a project uses is now settled by [0015-import-harness-selection-flag](0015-import-harness-selection-flag.md) (an explicit, validated `--harness` flag on `hatch init`, the one command that creates the manifest). How a new harness would be onboarded end-to-end remains open for a later decision if needed.
 
 ## Agent Rules
 
