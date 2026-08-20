@@ -35,7 +35,7 @@
 - [x] 5.1 Verify the warning is emitted at command entry rather than at commit time, by asserting it appears on a command that fails before reaching its commit.
 - [x] 5.2 Verify the warning is emitted on every invocation, by asserting two successive imports in a non-git project each produce it, and that its presence does not change a successful command's exit code.
 - [x] 5.3 Run lint, typecheck, the full test suite, and the build; verify all pass with no skipped or silently-passing tests among those touched by 1.2.
-- [ ] 5.4 Run a manual acceptance-test walkthrough (`cli-acceptance-testing`) against the built CLI covering `init` main flow, re-init both ways, import and remove in both a git and a non-git project, and a deliberate mid-operation failure in a non-git project; verify every effect by direct observation before opening the PR.
+- [x] 5.4 Run a manual acceptance-test walkthrough (`cli-acceptance-testing`) against the built CLI covering `init` main flow, re-init both ways, import and remove in both a git and a non-git project, and a deliberate mid-operation failure in a non-git project; verify every effect by direct observation before opening the PR.
 
 ## 6. Architecture decisions and documentation
 
