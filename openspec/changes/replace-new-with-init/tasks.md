@@ -47,5 +47,5 @@
 
 ## 7. Cross-repo: registry self-documentation
 
-- [ ] 7.1 Update `hatch-usage/SKILL.md` in `AI-Wise-IT/hatch-skills` — replace the `new` entry with `init`, correct `import`'s `--harness` rule, and describe the git-optional behavior — with a `skill.json` version bump; verify the blocking `version-check` status check passes on the PR.
-- [ ] 7.2 Merge the `hatch-skills` PR only after the CLI change has landed and been released; verify a fresh `hatch init` in a scratch project places a self-documentation skill whose command list matches the shipped CLI.
+- [x] 7.1 Update `hatch-usage/SKILL.md` in `AI-Wise-IT/hatch-skills` — replace the `new` entry with `init`, correct `import`'s `--harness` rule, and describe the git-optional behavior — with a `skill.json` version bump; verify the blocking `version-check` status check passes on the PR.
+- [x] 7.2 Merge the `hatch-skills` PR only after the CLI change has landed and been released; verify a fresh `hatch init` in a scratch project places a self-documentation skill whose command list matches the shipped CLI.
