@@ -1,11 +1,11 @@
 // `hatch import` (UC-3): imports a single named standalone skill, or a whole
-// group atomically, into an existing project — auto-initializing git if
-// needed, authenticating if needed, fetching the target per harness (for a
+// group atomically, into a project `hatch init` has already initialized —
+// authenticating if needed, fetching the target per harness (for a
 // standalone skill, resolving harness-suffixed vs. plain variants) or
 // resolving the target's full member graph (for a group, per
 // 0013-registry-group-structure-and-permanence.md and
 // 0016-group-member-manifest-format.md), placing it, updating the manifest,
-// and committing once.
+// and committing once when the project is version-controlled.
 // Batch 5/6 scope: UC-3 main flow (standalone, group), AF-6 (destination
 // occupied), AF-7 (registry unreachable), AF-8 (invalid password), AF-9
 // (pinned-pointer version conflict, group-only).
@@ -30,7 +30,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
-import { CheckRepoActions, simpleGit } from "simple-git";
 import { resolveToken, writeCredentials } from "../auth/credentials.js";
 import { validateGitHubToken } from "../auth/github-token.js";
 import { promptHidden, promptLine } from "../cli/prompt.js";
@@ -52,6 +51,10 @@ import {
   resolvePin,
 } from "../manifest-migrations/pin-spec.js";
 import {
+  type VersionControl,
+  openVersionControl,
+} from "../project/version-control.js";
+import {
   type RegistryFetchOk,
   fetchRegistryFile,
   fetchRegistryFolder,
@@ -70,7 +73,6 @@ interface ParsedArgs {
   targetName: string | undefined;
   spec: PinSpec;
   targetPath: string;
-  harnessArg: string | undefined;
   addHarness: string | undefined;
 }
 
@@ -117,10 +119,46 @@ interface PlacementTarget {
 // while fetching the resolved folder's content.
 class RegistryUnreachableError extends Error {}
 
+// Removes whatever this run wrote and puts the manifest back. Returns
+// undefined on a clean rollback, or the reason it could not finish.
+//
+// Recovery must never throw on its own account: an exception here would
+// replace the failure the caller is trying to report with a stack trace, and
+// would bury the one condition that matters most — placed content and the
+// manifest having ended up describing different states.
+function rollback(
+  writtenFiles: string[],
+  manifestPath: string,
+  originalManifestRaw: string,
+): string | undefined {
+  try {
+    for (const file of writtenFiles) {
+      rmSync(file, { force: true });
+    }
+    writeFileSync(manifestPath, originalManifestRaw, "utf8");
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+// The message for a failed operation, escalated when the rollback itself
+// could not complete — in that case "nothing was changed" would be a claim
+// the command cannot actually make.
+function failureMessage(
+  what: string,
+  cause: unknown,
+  rollbackFailure: string | undefined,
+): string {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return rollbackFailure === undefined
+    ? `hatch import: ${what} (${message}) — nothing was changed.`
+    : `hatch import: ${what} (${message}), and the rollback could not be completed (${rollbackFailure}) — this project's manifest and its placed content may now describe different states; compare them before running Hatch again.`;
+}
+
 function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   const positional: string[] = [];
   let targetPath = process.cwd();
-  let harnessArg: string | undefined;
   let addHarness: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
@@ -131,12 +169,6 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
         return { error: "--path requires a value" };
       }
       targetPath = value;
-    } else if (arg === "--harness") {
-      const value = argv[++i];
-      if (value === undefined) {
-        return { error: "--harness requires a value" };
-      }
-      harnessArg = value;
     } else if (arg === "--add-harness") {
       const value = argv[++i];
       if (value === undefined) {
@@ -151,26 +183,17 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   }
 
   // AF-5 (backfill a new harness): --add-harness takes no skill/group name
-  // and no --harness (that flag seeds a manifest-less project's *initial*
-  // harness set, per 0015-import-harness-selection-flag.md — a distinct
-  // operation from adding one more harness to a project that already has a
-  // manifest).
+  // — it operates on everything the manifest already records.
   if (addHarness !== undefined) {
     if (positional.length > 0) {
       return {
         error: `"--add-harness" cannot be combined with a skill/group name ("${positional[0]}")`,
       };
     }
-    if (harnessArg !== undefined) {
-      return {
-        error: '"--add-harness" cannot be combined with "--harness"',
-      };
-    }
     return {
       targetName: undefined,
       spec: { kind: "none" },
       targetPath: resolve(targetPath),
-      harnessArg: undefined,
       addHarness,
     };
   }
@@ -191,7 +214,6 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     targetName: name,
     spec,
     targetPath: resolve(targetPath),
-    harnessArg,
     addHarness: undefined,
   };
 }
@@ -340,7 +362,7 @@ export async function runImport(argv: string[]): Promise<number> {
     console.error(`hatch import: ${parsed.error} — nothing was changed.`);
     return 1;
   }
-  const { targetName: name, spec, targetPath, harnessArg, addHarness } = parsed;
+  const { targetName: name, spec, targetPath, addHarness } = parsed;
 
   if (!existsSync(targetPath)) {
     console.error(
@@ -349,8 +371,13 @@ export async function runImport(argv: string[]): Promise<number> {
     return 1;
   }
 
+  // Resolved at entry, before any mutation, so a run that aborts before it
+  // would ever have committed still tells the developer there is no
+  // recovery point.
+  const vc = await openVersionControl("hatch import", targetPath);
+
   if (addHarness !== undefined) {
-    return runAddHarness(addHarness, targetPath);
+    return runAddHarness(addHarness, targetPath, vc);
   }
   if (name === undefined) {
     // Unreachable: parseArgs guarantees targetName is set whenever
@@ -358,86 +385,37 @@ export async function runImport(argv: string[]): Promise<number> {
     throw new Error("unreachable: missing skill/group name");
   }
 
-  // Manifest bootstrap (0015-import-harness-selection-flag.md): a project
-  // that already has a manifest is governed by its recorded harnesses,
-  // never the filesystem or a passed --harness; a manifest-less project
-  // requires --harness to seed one.
+  // A manifest is a precondition, never something import creates
+  // (0015-import-harness-selection-flag.md): placement is governed solely
+  // by the harnesses the manifest records, never by the filesystem.
   const manifestPath = join(targetPath, "hatch.manifest.json");
-  const manifestExistedBefore = existsSync(manifestPath);
-  let originalManifestRaw: string | undefined;
-  // biome-ignore lint/suspicious/noExplicitAny: manifest shape is migrated/validated ad hoc, same as new.ts
-  let existingManifest: Record<string, any> | undefined;
-  if (manifestExistedBefore) {
-    originalManifestRaw = readFileSync(manifestPath, "utf8");
-    existingManifest = migrateManifest(JSON.parse(originalManifestRaw));
+  if (!existsSync(manifestPath)) {
+    console.error(
+      "hatch import: no hatch.manifest.json found in this project — run `hatch init --harness <name[,name...]>` first — nothing was changed.",
+    );
+    return 1;
   }
+  const originalManifestRaw = readFileSync(manifestPath, "utf8");
+  const existingManifest = migrateManifest(JSON.parse(originalManifestRaw));
   const existingSkills: Record<string, SkillEntry> =
-    existingManifest &&
     typeof existingManifest.skills === "object" &&
     existingManifest.skills !== null
       ? (existingManifest.skills as Record<string, SkillEntry>)
       : {};
 
-  let harnesses: string[];
-  if (existingManifest) {
-    const recorded = existingManifest.harnesses;
-    if (
-      !Array.isArray(recorded) ||
-      recorded.length === 0 ||
-      !recorded.every((h) => typeof h === "string")
-    ) {
-      console.error(
-        `hatch import: "${manifestPath}" has no valid harnesses recorded — nothing was changed.`,
-      );
-      return 1;
-    }
-    harnesses = recorded as string[];
-  } else {
-    if (!harnessArg) {
-      console.error(
-        "hatch import: no hatch.manifest.json found in this project — --harness <name[,name...]> is required for a first import — nothing was changed.",
-      );
-      return 1;
-    }
-    const requested = harnessArg
-      .split(",")
-      .map((h) => h.trim())
-      .filter(Boolean);
-    if (requested.length === 0) {
-      console.error(
-        "hatch import: --harness <name[,name...]> is required for a first import — nothing was changed.",
-      );
-      return 1;
-    }
-    const unknownHarnesses = requested.filter((h) => !isKnownHarness(h));
-    if (unknownHarnesses.length > 0) {
-      console.error(
-        `hatch import: unrecognized harness(es): ${unknownHarnesses.join(", ")} — nothing was changed.`,
-      );
-      return 1;
-    }
-    harnesses = requested;
-  }
-  const sortedHarnesses = [...harnesses].sort();
-  const primaryHarness = sortedHarnesses[0];
-
-  // UC-3 step 2: auto-init git if the target isn't already a repo. Not
-  // rolled back on a later failure — it's an idempotent, one-time setup
-  // step, not part of "nothing changed" per UC-3's postcondition, which
-  // scopes that guarantee to content placed / manifest / commit.
-  const git = simpleGit(targetPath);
-  try {
-    const isRepo = await git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
-    if (!isRepo) {
-      await git.init();
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  const recorded = existingManifest.harnesses;
+  if (
+    !Array.isArray(recorded) ||
+    recorded.length === 0 ||
+    !recorded.every((h) => typeof h === "string")
+  ) {
     console.error(
-      `hatch import: failed to initialize git (${message}) — nothing was changed.`,
+      `hatch import: "${manifestPath}" has no valid harnesses recorded — nothing was changed.`,
     );
     return 1;
   }
+  const sortedHarnesses = [...(recorded as string[])].sort();
+  const primaryHarness = sortedHarnesses[0];
 
   // UC-3 step 3: authenticate if no session already resolves.
   const authResult = await authenticate();
@@ -765,21 +743,18 @@ export async function runImport(argv: string[]): Promise<number> {
         `${JSON.stringify(manifest, null, 2)}\n`,
         "utf8",
       );
-      await git.add(".");
-      await git.commit(
+      await vc.commit(
         newPin
           ? `hatch import: pin "${name}" to ${newPin.type === "exact" ? "v" : ">=v"}${newPin.value}`
           : `hatch import: clear the version pin for "${name}"`,
       );
     } catch (error) {
-      if (originalManifestRaw !== undefined) {
-        writeFileSync(manifestPath, originalManifestRaw, "utf8");
-      } else {
-        rmSync(manifestPath, { force: true });
-      }
-      const message = error instanceof Error ? error.message : String(error);
       console.error(
-        `hatch import: failed to update the pin for "${name}" (${message}) — nothing was changed.`,
+        failureMessage(
+          `failed to update the pin for "${name}"`,
+          error,
+          rollback([], manifestPath, originalManifestRaw),
+        ),
       );
       return 1;
     }
@@ -912,7 +887,6 @@ export async function runImport(argv: string[]): Promise<number> {
     );
 
     // UC-3 step 8: exactly one commit for the whole operation.
-    await git.add(".");
     const commitMessage = !existingEntry
       ? isGroup
         ? `hatch import: add group "${name}" (${placementTargets.length} member${placementTargets.length === 1 ? "" : "s"})`
@@ -920,19 +894,14 @@ export async function runImport(argv: string[]): Promise<number> {
       : isGroup
         ? `hatch import: update group "${name}" (v${existingEntry.version} → v${rootGroupVersion})`
         : `hatch import: update "${name}" (v${existingEntry.version} → v${(placementTargets[0] as PlacementTarget).version})`;
-    await git.commit(commitMessage);
+    await vc.commit(commitMessage);
   } catch (error) {
-    for (const file of writtenFiles) {
-      rmSync(file, { force: true });
-    }
-    if (originalManifestRaw !== undefined) {
-      writeFileSync(manifestPath, originalManifestRaw, "utf8");
-    } else {
-      rmSync(manifestPath, { force: true });
-    }
-    const message = error instanceof Error ? error.message : String(error);
     console.error(
-      `hatch import: failed to import "${name}" (${message}) — nothing was changed.`,
+      failureMessage(
+        `failed to import "${name}"`,
+        error,
+        rollback(writtenFiles, manifestPath, originalManifestRaw),
+      ),
     );
     return 1;
   }
@@ -1001,11 +970,12 @@ export async function runImport(argv: string[]): Promise<number> {
 async function runAddHarness(
   harnessName: string,
   targetPath: string,
+  vc: VersionControl,
 ): Promise<number> {
   const manifestPath = join(targetPath, "hatch.manifest.json");
   if (!existsSync(manifestPath)) {
     console.error(
-      "hatch import: no hatch.manifest.json found in this project — run `hatch import --harness <name>` first — nothing was changed.",
+      "hatch import: no hatch.manifest.json found in this project — run `hatch init --harness <name[,name...]>` first — nothing was changed.",
     );
     return 1;
   }
@@ -1043,23 +1013,6 @@ async function runAddHarness(
     existingManifest.skills && typeof existingManifest.skills === "object"
       ? (existingManifest.skills as Record<string, SkillEntry>)
       : {};
-
-  // UC-3 step 2: auto-init git if the target somehow isn't a repo yet — a
-  // project with an existing manifest almost always already is one, but
-  // this mirrors the main flow's own defensive handling rather than assume.
-  const git = simpleGit(targetPath);
-  try {
-    const isRepo = await git.checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
-    if (!isRepo) {
-      await git.init();
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(
-      `hatch import: failed to initialize git (${message}) — nothing was changed.`,
-    );
-    return 1;
-  }
 
   // UC-3 step 3: authenticate if no session already resolves.
   const authResult = await authenticate();
@@ -1283,8 +1236,7 @@ async function runAddHarness(
       "utf8",
     );
 
-    await git.add(".");
-    await git.commit(
+    await vc.commit(
       `hatch import: add harness "${harnessName}" (${placedNames.length} item${placedNames.length === 1 ? "" : "s"} backfilled)`,
     );
 
@@ -1304,13 +1256,12 @@ async function runAddHarness(
     }
     return 0;
   } catch (error) {
-    for (const file of writtenFiles) {
-      rmSync(file, { force: true });
-    }
-    writeFileSync(manifestPath, originalManifestRaw, "utf8");
-    const message = error instanceof Error ? error.message : String(error);
     console.error(
-      `hatch import: failed to add harness "${harnessName}" (${message}) — nothing was changed.`,
+      failureMessage(
+        `failed to add harness "${harnessName}"`,
+        error,
+        rollback(writtenFiles, manifestPath, originalManifestRaw),
+      ),
     );
     return 1;
   }

@@ -68,6 +68,6 @@ Triggered by `hatch remove --harness <name>`, with no skill/group target.
 
 - A skill that belongs to a group can only be removed as part of removing the whole group — never individually, since group members may depend on each other.
 - Local edits and manifest/disk drift both require confirmation before removal proceeds; unattended runs default to aborting rather than silently modifying state.
-- `hatch remove` follows the same one-invocation-one-commit rule as `hatch import`.
+- `hatch remove` follows the same one-invocation-one-commit rule as `hatch import`, and the same git-optional rule: without a repository at the project root it removes the content, skips the commit, and warns — see [0026-git-optional-dependency](../architecture/decisions/0026-git-optional-dependency.md). Its "nothing was changed" guarantee on failure is met by restoring the deleted content from the command's own snapshot, so it holds with or without a repository.
 - A project must always declare at least one harness — dropping the last remaining harness is blocked.
 - `hatch remove` is a distinct command, not a flag on `hatch import` — import stays purely additive, remove is the single home for anything destructive (including dropping a harness).

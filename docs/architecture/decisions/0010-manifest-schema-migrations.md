@@ -32,9 +32,9 @@ UC-3 and UC-4's business rule that every `hatch import`/`hatch remove` operation
 
 ## Consequences
 
-- `hatch.manifest.json`'s JSON schema must always include `schemaVersion`, starting at `1` for the format `hatch new` first writes.
+- `hatch.manifest.json`'s JSON schema must always include `schemaVersion`, starting at `1` for the format first written when a project is initialized.
 - The Hatch CLI repo needs an ordered migration-function registry (e.g. `src/manifest-migrations/`), one function per schema version bump, applied in sequence.
-- Every command that reads the manifest must route through this migration chain before using its contents — not just `hatch import`/`hatch new`, but any future command that reads it too.
+- Every command that reads the manifest must route through this migration chain before using its contents — not just `hatch init`/`hatch import`, but any future command that reads it too.
 
 ## Agent Rules
 
