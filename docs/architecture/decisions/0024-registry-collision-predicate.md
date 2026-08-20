@@ -25,7 +25,7 @@ The check runs once per harness the CLI currently supports, reusing [0001-harnes
 
 ## Context
 
-[0014-registry-collision-detection](0014-registry-collision-detection.md) settled *who* builds the collision check and *where* it runs (one real implementation in hatch-cli, invoked from both hatch-skills' and hatch-cli's own CI) but never defined the actual predicate for "collision" — it assumed the algorithm "exists" via [0001](0001-harness-suffix-convention.md) and [0013](0013-registry-group-structure-and-permanence.md) without spelling out what those algorithms actually imply mechanically. Batch 10 (`docs/build-plan.md`) cannot implement the check without that predicate being fixed.
+[0014-registry-collision-detection](0014-registry-collision-detection.md) settled *who* builds the collision check and *where* it runs (one real implementation in hatch-cli, invoked from both hatch-skills' and hatch-cli's own CI) but never defined the actual predicate for "collision" — it assumed the algorithm "exists" via [0001](0001-harness-suffix-convention.md) and [0013](0013-registry-group-structure-and-permanence.md) without spelling out what those algorithms actually imply mechanically. The collision check could not be implemented without that predicate being fixed.
 
 Tracing the two resolution algorithms Batch 10 is required to reuse (rather than reimplement) resolves the ambiguity:
 

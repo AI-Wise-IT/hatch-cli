@@ -16,7 +16,7 @@ Every skill and group folder in the registry carries its own independent version
 
 CI enforces, as a required status check on every PR (per [0008-trunk-based-branch-protection](0008-trunk-based-branch-protection.md)), that any skill/group folder whose content changed also had its metadata file's `version` field changed in the same PR. On merge to `main`, CI automatically pushes a `<name>@<version>` git tag at the merge commit for every skill/group whose version changed in that merge — no manual publish step.
 
-`hatch import` fetches "latest" by resolving `ref=main` (today's mechanism, per [0003-registry-github-tarball-fetch](0003-registry-github-tarball-fetch.md)) when no version is pinned. Fetching a specific historical version resolves to `ref=<name>@<version>`, via the same GitHub tarball/contents API — a ref-parameterized call, not a new mechanism. Actually exposing a pinned-version option in `hatch import`'s own UX is explicitly deferred alongside recipes (per [mvp-scope.md](../../../intake/mvp-scope.md)); this record establishes only the underlying retrieval mechanism, so that capability requires no redesign whenever it returns.
+`hatch import` fetches "latest" by resolving `ref=main` (today's mechanism, per [0003-registry-github-tarball-fetch](0003-registry-github-tarball-fetch.md)) when no version is pinned. Fetching a specific historical version resolves to `ref=<name>@<version>`, via the same GitHub tarball/contents API — a ref-parameterized call, not a new mechanism. Actually exposing a pinned-version option in `hatch import`'s own UX was, at the time of this record, deferred alongside recipes — subsequently pulled back into scope on its own merits by [rescope-0001](../../../intake/rescope-0001-standalone-version-pinning.md) and settled by [0020-standalone-version-pin-manifest-and-parsing](0020-standalone-version-pin-manifest-and-parsing.md); this record establishes only the underlying retrieval mechanism, so that capability requires no redesign whenever it returns.
 
 ## Context
 
@@ -61,11 +61,13 @@ During this cluster's conversation, two retrieval approaches were directly compa
 
 ## Machine Check
 
+Run this in the `hatch-skills` checkout. The tags live in the registry repo, so in `hatch-cli` it returns nothing — which would read as the failure described below rather than as the wrong repository.
+
 ```bash
 git tag -l "*@*" | head -5
 ```
 
-Expected result: tags of the form `<name>@<version>` exist in the registry repo — at least one per published skill/group version. An empty result indicates the CI tag-push step isn't wired up.
+Expected result: tags of the form `<name>@<version>` — at least one per published skill/group version. An empty result, run in the registry repo, indicates the CI tag-push step isn't wired up.
 
 ## Precedence
 
