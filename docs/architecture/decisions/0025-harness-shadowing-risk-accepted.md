@@ -5,14 +5,14 @@
 - **id:** 0025-harness-shadowing-risk-accepted
 - **component:** registry-collision-detection
 - **status:** accepted
-- **applies_to:** the CLI-side check [0014-registry-collision-detection](0014-registry-collision-detection.md) requires; the collision predicate [0024-registry-collision-predicate](0024-registry-collision-predicate.md) settles; `intake/backlog-0002-suffix-shadowing-lint.md`
+- **applies_to:** the CLI-side check [0014-registry-collision-detection](0014-registry-collision-detection.md) requires; the collision predicate [0024-registry-collision-predicate](0024-registry-collision-predicate.md) settles
 - **decision_record:** `docs/architecture/decisions/0025-harness-shadowing-risk-accepted.md`
 
 ## Decision
 
 The harness-suffix "shadowing" risk — a newly-reserved harness code causing an existing, independently-published top-level skill name (coincidentally ending in that code) to be silently reinterpreted by `resolveSkillFolderName` as a harness-variant of some other family, shadowing its real content for that harness — will not be detected by any automated check. This is an accepted risk, not deferred work.
 
-No static, single-snapshot check can implement this without false-positiving on legitimate, intentional family+variant pairs already published in the registry (see Context). The only sound detection would compare `resolveSkillFolderName` resolution behavior using the harness-registry.json from before vs. after a proposed hatch-cli change — a materially more complex, before/after diff check. The developer declined to build this, or the separate advisory "flag any suffix-shaped name for human review" lint ADR-0001 named ([backlog-0002-suffix-shadowing-lint](../../intake/backlog-0002-suffix-shadowing-lint.md)), given the low actual risk (see Context).
+No static, single-snapshot check can implement this without false-positiving on legitimate, intentional family+variant pairs already published in the registry (see Context). The only sound detection would compare `resolveSkillFolderName` resolution behavior using the harness-registry.json from before vs. after a proposed hatch-cli change — a materially more complex, before/after diff check. The developer declined to build this, or the separate advisory "flag any suffix-shaped name for human review" lint ADR-0001 named in its own Consequences, given the low actual risk (see Context).
 
 Nothing else about Batch 10 changes: the registry-side and CLI-side collision-check CI jobs, and the `check-collisions` subcommand's actual predicate ([0024-registry-collision-predicate](0024-registry-collision-predicate.md) — literal destination-path collisions between distinct physical sources) remain exactly as built. Only the CLI-side check's stated rationale changes: it verifies hatch-cli's own resolution/group-parsing logic doesn't regress against the real, live hatch-skills tree — it does not, and will not, detect harness-code-growth shadowing.
 
@@ -29,7 +29,7 @@ Surfaced directly to the developer with the two remaining options (build a befor
 ## Alternatives Considered
 
 - **Build the before/after diff check**: compare `resolveSkillFolderName` resolution for every existing top-level family name using the harness-registry.json from a hatch-cli PR's base commit vs. its head commit, against the same hatch-skills tree, flagging any family whose resolved source folder changed. Not chosen: correctly avoids the false-positive problem, but is a materially more complex mechanism (a temporal diff, not a single-pass scan) for a risk the developer judged not worth engineering against right now.
-- **Build ADR-0001's separate advisory lint** (flag any skill name ending in a reserved harness code, for human review before publishing — [backlog-0002-suffix-shadowing-lint](../../intake/backlog-0002-suffix-shadowing-lint.md)). Not chosen for the same reason — judged disproportionate given the actual risk level and current single-maintainer context.
+- **Build ADR-0001's separate advisory lint** (flag any skill name ending in a reserved harness code, for human review before publishing, as [0001-harness-suffix-convention](0001-harness-suffix-convention.md)'s Consequences require). Not chosen for the same reason — judged disproportionate given the actual risk level and current single-maintainer context.
 - **Fold shadowing detection into the existing static predicate** (flag whenever `resolveSkillFolderName(family, harness, ...)` returns something other than `family` itself). Not chosen: proven, concretely, to false-positive on the real `_harness-suffix-fixture` pair already in the registry — not a viable option at all, not just a judgment call.
 
 ## Trade-offs Accepted
@@ -42,7 +42,7 @@ Surfaced directly to the developer with the two remaining options (build a befor
 ## Consequences
 
 - [0014-registry-collision-detection](0014-registry-collision-detection.md)'s Context/Consequences are amended: the CLI-side check's rationale no longer claims to catch harness-code-growth shadowing. Its real, accurate value is verifying hatch-cli's own resolution/group-parsing logic doesn't regress against the real, live hatch-skills tree.
-- [intake/backlog-0002-suffix-shadowing-lint](../../intake/backlog-0002-suffix-shadowing-lint.md) is marked rejected (won't-build) rather than left open as deferred work, referencing this record.
+- [0001-harness-suffix-convention](0001-harness-suffix-convention.md)'s required advisory lint is rejected (won't-build) rather than left open as deferred work — this record is where that rejection lives.
 - If the registry ever gains outside publishers, or the reserved-code set grows enough that collision probability meaningfully rises, this record's acceptance should be revisited — the before/after diff check described in Alternatives Considered is the concrete mechanism to build at that point.
 
 ## Agent Rules
@@ -67,5 +67,5 @@ Expected result: no match — confirms no shadowing-detection logic was added to
 
 - Corrects [0014-registry-collision-detection](0014-registry-collision-detection.md)'s stated rationale for the CLI-side check. [0014](0014-registry-collision-detection.md) has been updated to cross-reference this record.
 - Does not narrow or contradict [0024-registry-collision-predicate](0024-registry-collision-predicate.md) — that record's predicate (literal distinct-physical-source collisions) remains exactly as built; this record only settles that it will not be extended to cover shadowing.
-- Resolves [intake/backlog-0002-suffix-shadowing-lint](../../intake/backlog-0002-suffix-shadowing-lint.md) as rejected (won't-build).
+- Resolves [0001-harness-suffix-convention](0001-harness-suffix-convention.md)'s required advisory suffix lint as rejected (won't-build).
 - No known conflicting decision records.
