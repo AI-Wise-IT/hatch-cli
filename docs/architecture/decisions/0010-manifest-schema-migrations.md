@@ -35,6 +35,11 @@ UC-3 and UC-4's business rule that every `hatch import`/`hatch remove` operation
 - `hatch.manifest.json`'s JSON schema must always include `schemaVersion`, starting at `1` for the format first written when a project is initialized.
 - The Hatch CLI repo needs an ordered migration-function registry (e.g. `src/manifest-migrations/`), one function per schema version bump, applied in sequence.
 - Every command that reads the manifest must route through this migration chain before using its contents — not just `hatch init`/`hatch import`, but any future command that reads it too.
+- The chain as shipped today runs to schema version **4**, every step of it an additive-field bump whose migration function is the identity:
+  - v1 → v2, optional per-entry `group` and group entries recorded in `skills` ([0017-manifest-schema-v2-group-membership](0017-manifest-schema-v2-group-membership.md));
+  - v2 → v3, optional per-entry `contentHash` and `pin` ([0018-manifest-content-hash-local-edit-detection](0018-manifest-content-hash-local-edit-detection.md), [0020-standalone-version-pin-manifest-and-parsing](0020-standalone-version-pin-manifest-and-parsing.md));
+  - v3 → v4, the optional top-level `testProject` marking a project that may import testing content ([0027-testing-skill-convention](0027-testing-skill-convention.md)).
+  Nothing is backfilled at any step: a manifest written before a given field existed simply doesn't carry it, and reads as the field's documented default.
 
 ## Agent Rules
 

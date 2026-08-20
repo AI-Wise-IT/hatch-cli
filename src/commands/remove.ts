@@ -43,6 +43,7 @@ import {
   restoreSnapshot,
   snapshotTree,
 } from "../project/file-snapshot.js";
+import { isTestProject } from "../project/test-project.js";
 import {
   type VersionControl,
   openVersionControl,
@@ -386,6 +387,10 @@ export async function runRemove(argv: string[]): Promise<number> {
     const newManifest = migrateManifest({
       schemaVersion: 1,
       harnesses: sortedHarnesses,
+      // The test-project opt-in survives every rewrite of this manifest
+      // (0027-testing-skill-convention.md) — the manifest is rebuilt from
+      // scratch here, so anything not carried across would be dropped.
+      ...(isTestProject(manifest) ? { testProject: true } : {}),
       skills: newSkills,
     });
     writeFileSync(

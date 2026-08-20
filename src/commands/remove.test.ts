@@ -917,3 +917,41 @@ describe("runRemove — version control is optional", () => {
     );
   });
 });
+
+describe("runRemove — testing content in a test project (0027)", () => {
+  it("removes a recorded testing skill exactly as it removes ordinary content", async () => {
+    const hash = placeSkill(".claude", "_reimport-fixture", {
+      "SKILL.md": "# _reimport-fixture",
+    });
+    writeFileSync(
+      join(target, "hatch.manifest.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 3,
+          harnesses: ["claude"],
+          testProject: true,
+          skills: {
+            "_reimport-fixture": { version: "1.0.0", contentHash: hash },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    await commitAll("seed");
+
+    const exitCode = await runRemove(["_reimport-fixture", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      existsSync(join(target, ".claude", "skills", "_reimport-fixture")),
+    ).toBe(false);
+    const manifest = JSON.parse(
+      readFileSync(join(target, "hatch.manifest.json"), "utf8"),
+    );
+    expect(manifest.skills["_reimport-fixture"]).toBeUndefined();
+    // The opt-in survives removal's manifest rewrite.
+    expect(manifest.testProject).toBe(true);
+  });
+});

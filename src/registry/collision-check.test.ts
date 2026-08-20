@@ -170,6 +170,40 @@ describe("checkRegistryCollisions", () => {
     expect(result.errors).toHaveLength(1);
     expect(result.collisions).toHaveLength(1);
   });
+
+  // 0027-testing-skill-convention.md: testing content stays in the same
+  // destination namespace as everything else, so the guarantee keeps no
+  // holes — testing skills simply can't be imported into an ordinary
+  // project. This check needs no knowledge of the convention at all.
+  it("flags a testing skill's destination colliding with another source", async () => {
+    writeSkillJson(dir, "_fixture-group", {
+      version: "1.0.0",
+      testing: true,
+      members: [{ kind: "nested", name: "helper" }],
+    });
+    mkdirSync(join(dir, "_fixture-group", "helper"), { recursive: true });
+    writeStandaloneSkill(dir, "helper");
+
+    const result = await checkRegistryCollisions(dir);
+
+    expect(result.ok).toBe(false);
+    expect(result.collisions[0]?.destination).toBe("helper");
+    const paths = result.collisions[0]?.sources.map((s) => s.path).sort();
+    expect(paths).toEqual(["_fixture-group/helper", "helper"]);
+  });
+
+  it("counts a testing standalone skill's own name as a destination", async () => {
+    writeSkillJson(dir, "_reimport-fixture", {
+      version: "1.0.0",
+      testing: true,
+    });
+    writeGroup(dir, "toolkit", [{ kind: "nested", name: "_reimport-fixture" }]);
+
+    const result = await checkRegistryCollisions(dir);
+
+    expect(result.ok).toBe(false);
+    expect(result.collisions[0]?.destination).toBe("_reimport-fixture");
+  });
 });
 
 describe("formatCollisionReport", () => {
