@@ -38,6 +38,7 @@ import {
 } from "../manifest-migrations/content-hash.js";
 import { migrateManifest } from "../manifest-migrations/index.js";
 import {
+  type FileSnapshot,
   createSnapshot,
   restoreSnapshot,
   snapshotTree,
@@ -147,6 +148,44 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     targetPath: resolve(targetPath),
     force,
   };
+}
+
+// Puts back everything the command deleted, then the manifest it may have
+// rewritten. Returns undefined on a clean rollback, or the reason it could
+// not finish.
+//
+// Recovery must never throw on its own account: an exception here would
+// replace the failure the caller is trying to report with a stack trace,
+// and would bury the one condition that matters most — placed content and
+// the manifest having ended up describing different states, which is
+// exactly what contentHash drift detection is built to distrust.
+function rollback(
+  targetPath: string,
+  snapshot: FileSnapshot,
+  manifestPath: string,
+  originalManifestRaw: string,
+): string | undefined {
+  try {
+    restoreSnapshot(targetPath, snapshot);
+    writeFileSync(manifestPath, originalManifestRaw, "utf8");
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+// The message for a failed operation, escalated when the rollback itself
+// could not complete — in that case "nothing was changed" would be a claim
+// the command cannot actually make.
+function failureMessage(
+  what: string,
+  cause: unknown,
+  rollbackFailure: string | undefined,
+): string {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return rollbackFailure === undefined
+    ? `hatch remove: ${what} (${message}) — nothing was changed.`
+    : `hatch remove: ${what} (${message}), and the rollback could not be completed (${rollbackFailure}) — this project's manifest and its placed content may now describe different states; compare them before running Hatch again.`;
 }
 
 function itemStatus(dir: string, item: TargetItem): ItemStatus {
@@ -362,11 +401,12 @@ export async function runRemove(argv: string[]): Promise<number> {
       : `hatch remove: remove "${name}"`;
     await vc.commit(commitMessage);
   } catch (error) {
-    restoreSnapshot(targetPath, snapshot);
-    writeFileSync(manifestPath, originalManifestRaw, "utf8");
-    const message = error instanceof Error ? error.message : String(error);
     console.error(
-      `hatch remove: failed to remove "${name}" (${message}) — nothing was changed.`,
+      failureMessage(
+        `failed to remove "${name}"`,
+        error,
+        rollback(targetPath, snapshot, manifestPath, originalManifestRaw),
+      ),
     );
     return 1;
   }
@@ -544,11 +584,12 @@ async function runDropHarness(
       `hatch remove: drop harness "${harnessName}" (${itemsWithContent.length} item${itemsWithContent.length === 1 ? "" : "s"})`,
     );
   } catch (error) {
-    restoreSnapshot(targetPath, snapshot);
-    writeFileSync(manifestPath, originalManifestRaw, "utf8");
-    const message = error instanceof Error ? error.message : String(error);
     console.error(
-      `hatch remove: failed to drop harness "${harnessName}" (${message}) — nothing was changed.`,
+      failureMessage(
+        `failed to drop harness "${harnessName}"`,
+        error,
+        rollback(targetPath, snapshot, manifestPath, originalManifestRaw),
+      ),
     );
     return 1;
   }

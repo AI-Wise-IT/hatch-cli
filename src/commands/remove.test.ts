@@ -26,6 +26,7 @@ vi.mock("node:fs", async (importOriginal) => {
 
 const { simpleGit } = await import("simple-git");
 const { runRemove } = await import("./remove.js");
+const realFs = await vi.importActual<typeof import("node:fs")>("node:fs");
 
 let tempParent: string;
 let target: string;
@@ -95,6 +96,11 @@ beforeEach(async () => {
   process.env.GIT_COMMITTER_EMAIL = "test@example.com";
 
   setStdinTTY(false);
+
+  // The module-level fs mock keeps whatever implementation a previous test
+  // gave it, so put the real one back before each test.
+  // biome-ignore lint/suspicious/noExplicitAny: passthrough to the real fs signature
+  vi.mocked(writeFileSync).mockImplementation(realFs.writeFileSync as any);
 
   await simpleGit(target).init();
 });
@@ -743,6 +749,49 @@ describe("runRemove — rollback on partial failure", () => {
     );
     const logAfter = await simpleGit(target).log();
     expect(logAfter.total).toBe(logBefore.total);
+  });
+
+  it("reports the failure and the incomplete rollback, rather than throwing, when recovery itself cannot finish", async () => {
+    rmSync(join(target, ".git"), { recursive: true, force: true });
+    placeRichSkill();
+    writeManifest({ "hatch-usage": { version: "1.0.0" } }, ["claude", "codex"]);
+    const manifestBefore = readFileSync(
+      join(target, "hatch.manifest.json"),
+      "utf8",
+    );
+    // Every write to the manifest fails — so the rollback's own attempt to
+    // put it back fails too, which must not turn into an unhandled throw
+    // that replaces the command's error message with a stack trace.
+    vi.mocked(writeFileSync).mockImplementation(((
+      path: string,
+      data: string,
+      options: unknown,
+    ) => {
+      if (String(path).endsWith("hatch.manifest.json")) {
+        throw new Error("simulated disk failure");
+      }
+      // biome-ignore lint/suspicious/noExplicitAny: passthrough to the real fs signature
+      return (realFs.writeFileSync as any)(path, data, options);
+      // biome-ignore lint/suspicious/noExplicitAny: passthrough to the real fs signature
+    }) as any);
+
+    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleErrors.some(
+        (m) =>
+          m.includes('failed to remove "hatch-usage"') &&
+          m.includes("rollback could not be completed") &&
+          m.includes("may now describe different states"),
+      ),
+    ).toBe(true);
+    // The content half of the rollback still ran, and the manifest was never
+    // successfully written in the first place.
+    expectFullyRestored();
+    expect(readFileSync(join(target, "hatch.manifest.json"), "utf8")).toBe(
+      manifestBefore,
+    );
   });
 
   it("restores a dropped harness's content when --harness fails partway", async () => {

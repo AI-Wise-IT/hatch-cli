@@ -119,6 +119,43 @@ interface PlacementTarget {
 // while fetching the resolved folder's content.
 class RegistryUnreachableError extends Error {}
 
+// Removes whatever this run wrote and puts the manifest back. Returns
+// undefined on a clean rollback, or the reason it could not finish.
+//
+// Recovery must never throw on its own account: an exception here would
+// replace the failure the caller is trying to report with a stack trace, and
+// would bury the one condition that matters most — placed content and the
+// manifest having ended up describing different states.
+function rollback(
+  writtenFiles: string[],
+  manifestPath: string,
+  originalManifestRaw: string,
+): string | undefined {
+  try {
+    for (const file of writtenFiles) {
+      rmSync(file, { force: true });
+    }
+    writeFileSync(manifestPath, originalManifestRaw, "utf8");
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+// The message for a failed operation, escalated when the rollback itself
+// could not complete — in that case "nothing was changed" would be a claim
+// the command cannot actually make.
+function failureMessage(
+  what: string,
+  cause: unknown,
+  rollbackFailure: string | undefined,
+): string {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return rollbackFailure === undefined
+    ? `hatch import: ${what} (${message}) — nothing was changed.`
+    : `hatch import: ${what} (${message}), and the rollback could not be completed (${rollbackFailure}) — this project's manifest and its placed content may now describe different states; compare them before running Hatch again.`;
+}
+
 function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   const positional: string[] = [];
   let targetPath = process.cwd();
@@ -712,10 +749,12 @@ export async function runImport(argv: string[]): Promise<number> {
           : `hatch import: clear the version pin for "${name}"`,
       );
     } catch (error) {
-      writeFileSync(manifestPath, originalManifestRaw, "utf8");
-      const message = error instanceof Error ? error.message : String(error);
       console.error(
-        `hatch import: failed to update the pin for "${name}" (${message}) — nothing was changed.`,
+        failureMessage(
+          `failed to update the pin for "${name}"`,
+          error,
+          rollback([], manifestPath, originalManifestRaw),
+        ),
       );
       return 1;
     }
@@ -857,13 +896,12 @@ export async function runImport(argv: string[]): Promise<number> {
         : `hatch import: update "${name}" (v${existingEntry.version} → v${(placementTargets[0] as PlacementTarget).version})`;
     await vc.commit(commitMessage);
   } catch (error) {
-    for (const file of writtenFiles) {
-      rmSync(file, { force: true });
-    }
-    writeFileSync(manifestPath, originalManifestRaw, "utf8");
-    const message = error instanceof Error ? error.message : String(error);
     console.error(
-      `hatch import: failed to import "${name}" (${message}) — nothing was changed.`,
+      failureMessage(
+        `failed to import "${name}"`,
+        error,
+        rollback(writtenFiles, manifestPath, originalManifestRaw),
+      ),
     );
     return 1;
   }
@@ -1218,13 +1256,12 @@ async function runAddHarness(
     }
     return 0;
   } catch (error) {
-    for (const file of writtenFiles) {
-      rmSync(file, { force: true });
-    }
-    writeFileSync(manifestPath, originalManifestRaw, "utf8");
-    const message = error instanceof Error ? error.message : String(error);
     console.error(
-      `hatch import: failed to add harness "${harnessName}" (${message}) — nothing was changed.`,
+      failureMessage(
+        `failed to add harness "${harnessName}"`,
+        error,
+        rollback(writtenFiles, manifestPath, originalManifestRaw),
+      ),
     );
     return 1;
   }
