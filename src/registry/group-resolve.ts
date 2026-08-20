@@ -11,6 +11,7 @@
 
 import { fetchRegistryFile, fetchRegistryFolder } from "./fetch.js";
 import { REGISTRY_ONLY_FILES } from "./registry-only-files.js";
+import { declaresTesting, isTestingSkillName } from "./testing-skill.js";
 
 export interface NestedMemberSpec {
   kind: "nested";
@@ -34,6 +35,11 @@ export interface GroupSkillJson {
   // skill.json flags it removed. Absent/false is the overwhelmingly common
   // case — active, normal content.
   removed?: boolean;
+  // 0027-testing-skill-convention.md: true when this folder declares itself
+  // testing content. Registry CI requires the field on every published
+  // folder, but a version published before that rule carries none — absent
+  // reads as ordinary content, never as an error.
+  testing?: boolean;
 }
 
 export interface ResolvedMember {
@@ -87,9 +93,10 @@ export function parseGroupSkillJson(
   const obj = (parsed ?? {}) as Record<string, unknown>;
   const version = typeof obj.version === "string" ? obj.version : "0.0.0";
   const removed = obj.removed === true ? true : undefined;
+  const testing = obj.testing === true ? true : undefined;
 
   if (obj.members === undefined) {
-    return { version, removed };
+    return { version, removed, testing };
   }
   if (!Array.isArray(obj.members)) {
     throw new GroupResolveError(
@@ -100,7 +107,7 @@ export function parseGroupSkillJson(
   const members = obj.members.map((entry, index) =>
     parseMemberSpec(entry, folderLabel, index),
   );
-  return { version, members, removed };
+  return { version, members, removed, testing };
 }
 
 function parseMemberSpec(
@@ -192,6 +199,10 @@ function extractSubtree(
 
 interface WalkState {
   token: string;
+  // 0027-testing-skill-convention.md: false in a project that has not opted
+  // in, where a pointer to testing content resolves to nothing — the same
+  // outcome as a pointer whose target does not exist.
+  allowTesting: boolean;
   // Group names already expanded (their `members` processed) — prevents
   // infinite recursion on a group-to-group pointer cycle. Per
   // 0013-registry-group-structure-and-permanence.md: "the visited set alone
@@ -244,6 +255,18 @@ async function walk(
       continue;
     }
 
+    // 0027-testing-skill-convention.md: to a project that has not opted in,
+    // testing content does not exist — a pointer at it fails exactly as a
+    // pointer at a missing name does, with no fetch and no hint that the
+    // target is real. Nested members need no equivalent check: they carry
+    // no skill.json and inherit their group's own classification.
+    if (!state.allowTesting && isTestingSkillName(name)) {
+      throw new GroupResolveError(
+        "not-found",
+        `"${name}" (referenced by a pointer) was not found in the registry`,
+      );
+    }
+
     const ref = member.version ? `${name}@${member.version}` : undefined;
     const skillJsonResult = await fetchRegistryFile(
       state.token,
@@ -259,6 +282,15 @@ async function walk(
       );
     }
     const meta = parseGroupSkillJson(skillJsonResult.content, name);
+
+    // The declaration backstop, for content that reached the registry
+    // without the reserved prefix — reported identically (0027).
+    if (!state.allowTesting && declaresTesting(meta)) {
+      throw new GroupResolveError(
+        "not-found",
+        `"${name}" (referenced by a pointer) was not found in the registry`,
+      );
+    }
 
     if (meta.members) {
       state.visitedGroups.add(name);
@@ -287,9 +319,11 @@ export async function resolveGroupMembers(
   rootVersion: string,
   rootMembers: MemberSpec[],
   rootFiles: Map<string, string>,
+  options: { allowTesting?: boolean } = {},
 ): Promise<GroupResolveResult> {
   const state: WalkState = {
     token,
+    allowTesting: options.allowTesting === true,
     visitedGroups: new Set([rootGroupName]),
     leafPinRequests: new Map(),
     leafClassified: new Set(),

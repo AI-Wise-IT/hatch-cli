@@ -70,8 +70,9 @@ function setStdinTTY(value: boolean) {
 function seedManifest(
   harnesses: string[],
   skills: Record<string, unknown> = {},
+  extra: Record<string, unknown> = {},
 ) {
-  seededManifestRaw = `${JSON.stringify({ schemaVersion: 3, harnesses, skills }, null, 2)}\n`;
+  seededManifestRaw = `${JSON.stringify({ schemaVersion: 3, harnesses, ...extra, skills }, null, 2)}\n`;
   writeFileSync(join(target, "hatch.manifest.json"), seededManifestRaw, "utf8");
 }
 
@@ -81,6 +82,13 @@ function expectManifestUnchanged() {
   expect(readFileSync(join(target, "hatch.manifest.json"), "utf8")).toBe(
     seededManifestRaw,
   );
+}
+
+// `git log` errors on a repository with no commits yet, so an assertion
+// that nothing was committed counts revisions instead.
+async function commitCount(dir: string): Promise<number> {
+  const out = await simpleGit(dir).raw(["rev-list", "--count", "--all"]);
+  return Number(out.trim());
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: assertions read ad-hoc manifest fields
@@ -165,7 +173,7 @@ describe("runImport — main flow", () => {
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
     expect(manifest).toEqual({
-      schemaVersion: 3,
+      schemaVersion: 4,
       harnesses: ["claude", "codex"],
       skills: {
         "hatch-usage": { version: "1.0.0", contentHash: expect.any(String) },
@@ -683,7 +691,7 @@ describe("runImport — group import (0013, 0016)", () => {
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
     expect(manifest).toEqual({
-      schemaVersion: 3,
+      schemaVersion: 4,
       harnesses: ["claude"],
       skills: {
         a: {
@@ -1804,5 +1812,356 @@ describe("runImport — AF-5: --add-harness backfill", () => {
     expect(consoleErrors.some((m) => m.includes("cannot be combined"))).toBe(
       true,
     );
+  });
+});
+
+describe("runImport — testing content does not exist to an ordinary project (0027)", () => {
+  // "_reimport-fixture" is a real, fetchable testing skill; "declared-fixture"
+  // is testing content that reached the registry without the reserved prefix;
+  // "ordinary-skill" is normal content. Nothing here exists for
+  // "ghost-skill" — the control the refusals are compared against.
+  function seedRegistry() {
+    vi.mocked(registryFolderExists).mockImplementation(
+      async (_token, name) => ({
+        ok: true,
+        exists: [
+          "_reimport-fixture",
+          "declared-fixture",
+          "ordinary-skill",
+        ].includes(name),
+      }),
+    );
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (
+        path === "_reimport-fixture/skill.json" ||
+        path === "declared-fixture/skill.json"
+      ) {
+        return {
+          ok: true,
+          content: JSON.stringify({ version: "1.0.0", testing: true }),
+        };
+      }
+      if (path === "ordinary-skill/skill.json") {
+        return { ok: true, content: plainSkillJson("1.0.0") };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(async (_token, name) => ({
+      ok: true,
+      files: new Map([
+        ["SKILL.md", `# ${name}`],
+        ["skill.json", JSON.stringify({ version: "1.0.0", testing: true })],
+      ]),
+    }));
+  }
+
+  it("reports a testing skill exactly as it reports a name that does not exist", async () => {
+    seedRegistry();
+    seedManifest(["claude"]);
+    await runImport(["ghost-skill", "--path", target]);
+    const ghost = consoleErrors.at(-1);
+
+    consoleErrors.length = 0;
+    const exitCode = await runImport(["_reimport-fixture", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    // Byte-identical but for the name — no hint the fixture is real.
+    expect(consoleErrors.at(-1)).toBe(
+      ghost?.replace("ghost-skill", "_reimport-fixture"),
+    );
+  });
+
+  it("says nothing about testing content, in any wording", async () => {
+    seedRegistry();
+    seedManifest(["claude"]);
+
+    await runImport(["_reimport-fixture", "--path", target]);
+
+    const refusal = consoleErrors.at(-1) ?? "";
+    expect(refusal).toContain("was not found in the registry");
+    expect(refusal).not.toMatch(/testing|testProject|--test-project/i);
+  });
+
+  it("changes nothing when it refuses", async () => {
+    seedRegistry();
+    seedManifest(["claude"]);
+
+    const exitCode = await runImport(["_reimport-fixture", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expectManifestUnchanged();
+    expect(
+      existsSync(join(target, ".claude", "skills", "_reimport-fixture")),
+    ).toBe(false);
+    expect(await commitCount(target)).toBe(0);
+  });
+
+  it("authenticates before refusing", async () => {
+    seedRegistry();
+    seedManifest(["claude"]);
+
+    await runImport(["_reimport-fixture", "--path", target]);
+
+    // The refusal is a registry-level outcome, not an argument check: it
+    // happens on the far side of authentication, like any other not-found.
+    expect(resolveToken).toHaveBeenCalled();
+  });
+
+  it("reports a pinned testing target as a missing ref, like any missing tag", async () => {
+    seedRegistry();
+    seedManifest(["claude"]);
+
+    const exitCode = await runImport([
+      "_reimport-fixture@1.0.0",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(consoleErrors.at(-1)).toContain(
+      '"_reimport-fixture@1.0.0" was not found in the registry',
+    );
+  });
+
+  it("reports declared testing content without the prefix the same way", async () => {
+    seedRegistry();
+    seedManifest(["claude"]);
+
+    const exitCode = await runImport(["declared-fixture", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expect(consoleErrors.at(-1)).toContain(
+      '"declared-fixture" was not found in the registry',
+    );
+    expect(consoleErrors.at(-1)).not.toMatch(/testing/i);
+    expectManifestUnchanged();
+  });
+
+  it("imports a target whose skill.json predates the declaration", async () => {
+    seedRegistry();
+    seedManifest(["claude"]);
+    // A version published before 0027 carries no `testing` field at all.
+    vi.mocked(fetchRegistryFolder).mockImplementation(async (_token, name) => ({
+      ok: true,
+      files: new Map([
+        ["SKILL.md", `# ${name}`],
+        ["skill.json", plainSkillJson("1.0.0")],
+      ]),
+    }));
+
+    const exitCode = await runImport(["ordinary-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(
+        join(target, ".claude", "skills", "ordinary-skill", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe("# ordinary-skill");
+  });
+
+  it("imports testing content into a project that opted in", async () => {
+    seedRegistry();
+    seedManifest(["claude"], {}, { testProject: true });
+
+    const exitCode = await runImport(["_reimport-fixture", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(
+        join(target, ".claude", "skills", "_reimport-fixture", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe("# _reimport-fixture");
+    expect(readManifest().skills["_reimport-fixture"].version).toBe("1.0.0");
+    expect(readManifest().testProject).toBe(true);
+    expect(await commitCount(target)).toBe(1);
+  });
+
+  it("honors a pinned testing target in a project that opted in", async () => {
+    seedRegistry();
+    seedManifest(["claude"], {}, { testProject: true });
+
+    const exitCode = await runImport([
+      "_reimport-fixture@1.0.0",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(readManifest().skills["_reimport-fixture"]).toEqual({
+      version: "1.0.0",
+      pin: { type: "exact", value: "1.0.0" },
+      contentHash: expect.any(String),
+    });
+  });
+});
+
+describe("runImport — a group never smuggles testing content in (0027)", () => {
+  // A real group pointing at one ordinary leaf and one testing leaf.
+  function seedGroup(testingLeafName: string) {
+    const members = [
+      { kind: "pointer", name: "ordinary-leaf" },
+      { kind: "pointer", name: testingLeafName },
+    ];
+    vi.mocked(registryFolderExists).mockImplementation(
+      async (_token, name) => ({
+        ok: true,
+        exists: name === "ordinary-leaf" || name === testingLeafName,
+      }),
+    );
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "my-group/skill.json") {
+        return { ok: true, content: groupSkillJson("1.0.0", members) };
+      }
+      if (path === "ordinary-leaf/skill.json") {
+        return { ok: true, content: plainSkillJson("1.0.0") };
+      }
+      if (path === `${testingLeafName}/skill.json`) {
+        return {
+          ok: true,
+          content: JSON.stringify({ version: "1.0.0", testing: true }),
+        };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(async (_token, name) => {
+      if (name === "my-group") {
+        return {
+          ok: true,
+          files: new Map([["skill.json", groupSkillJson("1.0.0", members)]]),
+        };
+      }
+      return {
+        ok: true,
+        files: new Map([
+          ["SKILL.md", `# ${name}`],
+          [
+            "skill.json",
+            name === testingLeafName
+              ? JSON.stringify({ version: "1.0.0", testing: true })
+              : plainSkillJson("1.0.0"),
+          ],
+        ]),
+      };
+    });
+  }
+
+  it("aborts the whole import when a pointer names testing content", async () => {
+    seedGroup("_fixture-leaf");
+    seedManifest(["claude"]);
+
+    const exitCode = await runImport(["my-group", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    // Reported as a pointer at a name the registry does not have — the same
+    // failure a genuinely dangling pointer produces.
+    expect(consoleErrors.at(-1)).toContain(
+      '"_fixture-leaf" (referenced by a pointer) was not found in the registry',
+    );
+    expect(consoleErrors.at(-1)).not.toMatch(/testing/i);
+    expectManifestUnchanged();
+    expect(existsSync(join(target, ".claude", "skills", "ordinary-leaf"))).toBe(
+      false,
+    );
+    expect(await commitCount(target)).toBe(0);
+  });
+
+  it("aborts the whole import when a pointer's target declares itself testing content", async () => {
+    seedGroup("declared-leaf");
+    seedManifest(["claude"]);
+
+    const exitCode = await runImport(["my-group", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expect(consoleErrors.at(-1)).toContain(
+      '"declared-leaf" (referenced by a pointer) was not found in the registry',
+    );
+    expectManifestUnchanged();
+    expect(existsSync(join(target, ".claude", "skills", "ordinary-leaf"))).toBe(
+      false,
+    );
+  });
+
+  it("places every member of the same group in a project that opted in", async () => {
+    seedGroup("_fixture-leaf");
+    seedManifest(["claude"], {}, { testProject: true });
+
+    const exitCode = await runImport(["my-group", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    for (const member of ["ordinary-leaf", "_fixture-leaf"]) {
+      expect(
+        readFileSync(
+          join(target, ".claude", "skills", member, "SKILL.md"),
+          "utf8",
+        ),
+      ).toBe(`# ${member}`);
+      expect(readManifest().skills[member].group).toBe("my-group");
+    }
+  });
+});
+
+describe("runImport — --add-harness in a test project (0027)", () => {
+  it("backfills a recorded testing skill exactly as it backfills ordinary content", async () => {
+    writeFileSync(
+      join(target, "hatch.manifest.json"),
+      JSON.stringify(
+        {
+          schemaVersion: 3,
+          harnesses: ["claude"],
+          testProject: true,
+          skills: {
+            "hatch-usage": { version: "1.0.0", contentHash: "placeholder" },
+            "_reimport-fixture": {
+              version: "1.0.0",
+              contentHash: "placeholder",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    vi.mocked(registryFolderExists).mockImplementation(
+      async (_token, name) => ({
+        ok: true,
+        exists: name === "hatch-usage" || name === "_reimport-fixture",
+      }),
+    );
+    vi.mocked(fetchRegistryFolder).mockImplementation(
+      async (_token, name, ref) => {
+        expect(ref).toBe(`${name}@1.0.0`);
+        return {
+          ok: true,
+          files: new Map([
+            ["SKILL.md", `# ${name}`],
+            ["skill.json", JSON.stringify({ version: "1.0.0" })],
+          ]),
+        };
+      },
+    );
+
+    const exitCode = await runImport([
+      "--add-harness",
+      "codex",
+      "--path",
+      target,
+    ]);
+
+    expect(exitCode).toBe(0);
+    for (const name of ["hatch-usage", "_reimport-fixture"]) {
+      expect(
+        readFileSync(
+          join(target, ".codex", "skills", name, "SKILL.md"),
+          "utf8",
+        ),
+      ).toBe(`# ${name}`);
+    }
+    // The opt-in survives the manifest rewrite, so the next import still works.
+    expect(readManifest().testProject).toBe(true);
+    expect(readManifest().harnesses).toEqual(["claude", "codex"]);
   });
 });

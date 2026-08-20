@@ -28,6 +28,7 @@ import { validateGitHubToken } from "../auth/github-token.js";
 import { promptHidden } from "../cli/prompt.js";
 import { getHarnessDefinition, isKnownHarness } from "../harness-registry.js";
 import { migrateManifest } from "../manifest-migrations/index.js";
+import { isTestProject } from "../project/test-project.js";
 import { openVersionControl } from "../project/version-control.js";
 import { fetchRegistryFolder } from "../registry/fetch.js";
 import { isRegistryOnlyFile } from "../registry/registry-only-files.js";
@@ -37,12 +38,18 @@ const SELF_DOC_SKILL_NAME = "hatch-usage";
 interface ParsedArgs {
   targetPath: string;
   harnesses: string[];
+  // 0027-testing-skill-convention.md: marks the project as one that may
+  // import testing content. Recorded in the convention's own record and in
+  // its spec, and deliberately absent from the README and from this
+  // command's output — ordinary projects have no reason to reach for it.
+  testProject: boolean;
 }
 
 function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   const positional: string[] = [];
   let targetPath = process.cwd();
   let harnessArg: string | undefined;
+  let testProject = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -58,6 +65,8 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
         return { error: "--harness requires a value" };
       }
       harnessArg = value;
+    } else if (arg === "--test-project") {
+      testProject = true;
     } else if (arg.startsWith("--")) {
       // Also how "skip the self-documentation skill" is refused: there is
       // no such flag, so any attempt at one lands here.
@@ -84,7 +93,7 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
     return { error: "--harness <name[,name...]> is required" };
   }
 
-  return { targetPath: resolve(targetPath), harnesses };
+  return { targetPath: resolve(targetPath), harnesses, testProject };
 }
 
 function isNetworkFailure(reason: string | undefined): boolean {
@@ -112,7 +121,7 @@ export async function runInit(argv: string[]): Promise<number> {
     console.error(`hatch init: ${parsed.error} — nothing was created.`);
     return 1;
   }
-  const { targetPath, harnesses } = parsed;
+  const { targetPath, harnesses, testProject } = parsed;
 
   // Validated before anything else — in particular before authenticating,
   // so a typo'd harness never costs a credential prompt or a registry call.
@@ -140,7 +149,7 @@ export async function runInit(argv: string[]): Promise<number> {
 
   const manifestPath = join(targetPath, "hatch.manifest.json");
   if (existsSync(manifestPath)) {
-    return reportAlreadyInitialized(manifestPath, harnesses);
+    return reportAlreadyInitialized(manifestPath, harnesses, testProject);
   }
 
   const sortedHarnesses = [...harnesses].sort();
@@ -224,6 +233,9 @@ export async function runInit(argv: string[]): Promise<number> {
     const manifest = migrateManifest({
       schemaVersion: 1,
       harnesses: sortedHarnesses,
+      // Recorded only when asked for, so an ordinary project's manifest is
+      // byte-identical to what it was before this flag existed.
+      ...(testProject ? { testProject: true } : {}),
       skills: {
         [SELF_DOC_SKILL_NAME]: {
           version: extractSkillVersion(fetchResult.files),
@@ -269,8 +281,10 @@ export async function runInit(argv: string[]): Promise<number> {
 function reportAlreadyInitialized(
   manifestPath: string,
   requested: string[],
+  testProject: boolean,
 ): number {
   let declared: string[] = [];
+  let alreadyTestProject = false;
   try {
     const manifest = migrateManifest(
       JSON.parse(readFileSync(manifestPath, "utf8")),
@@ -282,8 +296,20 @@ function reportAlreadyInitialized(
     ) {
       declared = recorded as string[];
     }
+    alreadyTestProject = isTestProject(manifest);
   } catch {
     declared = [];
+  }
+
+  // An existing manifest is never modified, so `--test-project` cannot be
+  // applied retroactively (0027-testing-skill-convention.md). Say so rather
+  // than accepting the flag silently — the caller asked for something this
+  // command will not do. Naming the flag here doesn't advertise it: the
+  // caller has just typed it.
+  if (testProject && !alreadyTestProject) {
+    console.log(
+      "hatch init: warning: --test-project had no effect — this project is already initialized and its manifest was left unchanged.",
+    );
   }
 
   const undeclared = requested.filter((h) => !declared.includes(h));

@@ -36,6 +36,41 @@ describe("parseGroupSkillJson", () => {
     });
   });
 
+  it("reads a plain skill's testing declaration (0027)", () => {
+    const result = parseGroupSkillJson(
+      JSON.stringify({ version: "1.0.0", testing: true }),
+      "_reimport-fixture",
+    );
+    expect(result.testing).toBe(true);
+  });
+
+  it("reads a group's testing declaration (0027)", () => {
+    const result = parseGroupSkillJson(
+      JSON.stringify({
+        version: "1.0.0",
+        testing: true,
+        members: [{ kind: "nested", name: "bar" }],
+      }),
+      "_group-fixture-sub",
+    );
+    expect(result.testing).toBe(true);
+    expect(result.members).toEqual([{ kind: "nested", name: "bar" }]);
+  });
+
+  it("parses a skill.json with no testing field unchanged", () => {
+    const result = parseGroupSkillJson(skillJson("1.0.0"), "foo");
+    expect(result.testing).toBeUndefined();
+    expect(result.version).toBe("1.0.0");
+  });
+
+  it("treats a declared-false folder as ordinary content", () => {
+    const result = parseGroupSkillJson(
+      JSON.stringify({ version: "1.0.0", testing: false }),
+      "prd-elicitation",
+    );
+    expect(result.testing).toBeUndefined();
+  });
+
   it("throws on a member missing a name", () => {
     expect(() =>
       parseGroupSkillJson(skillJson("1.0.0", [{ kind: "nested" }]), "foo"),

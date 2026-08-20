@@ -50,6 +50,7 @@ import {
   pinsEqual,
   resolvePin,
 } from "../manifest-migrations/pin-spec.js";
+import { isTestProject } from "../project/test-project.js";
 import {
   type VersionControl,
   openVersionControl,
@@ -67,6 +68,10 @@ import {
 } from "../registry/group-resolve.js";
 import { isRegistryOnlyFile } from "../registry/registry-only-files.js";
 import { isNewerCompatible } from "../registry/semver.js";
+import {
+  declaresTesting,
+  isTestingSkillName,
+} from "../registry/testing-skill.js";
 
 interface ParsedArgs {
   // Exactly one of targetName/addHarness is set — parseArgs enforces this.
@@ -154,6 +159,30 @@ function failureMessage(
   return rollbackFailure === undefined
     ? `hatch import: ${what} (${message}) — nothing was changed.`
     : `hatch import: ${what} (${message}), and the rollback could not be completed (${rollbackFailure}) — this project's manifest and its placed content may now describe different states; compare them before running Hatch again.`;
+}
+
+// The registry's "no such thing" report, in the two shapes it takes: an
+// exact-pin request names the ref, an unpinned one names the harness whose
+// folder resolution failed. 0027-testing-skill-convention.md routes its own
+// refusal through these same helpers rather than a message of its own, so a
+// project that has not opted in cannot tell testing content apart from
+// content the registry does not have.
+function notFoundPinnedMessage(ref: string): string {
+  return `"${ref}" was not found in the registry`;
+}
+
+function notFoundForHarnessMessage(name: string, harness: string): string {
+  return `"${name}" was not found in the registry for harness "${harness}"`;
+}
+
+function unavailableMessage(
+  name: string,
+  fetchRef: string | undefined,
+  primaryHarness: string,
+): string {
+  return fetchRef
+    ? notFoundPinnedMessage(fetchRef)
+    : notFoundForHarnessMessage(name, primaryHarness);
 }
 
 function parseArgs(argv: string[]): ParsedArgs | { error: string } {
@@ -403,6 +432,11 @@ export async function runImport(argv: string[]): Promise<number> {
       ? (existingManifest.skills as Record<string, SkillEntry>)
       : {};
 
+  // 0027-testing-skill-convention.md: whether this project may import
+  // testing content. Read here with the rest of the manifest; the refusal
+  // itself happens further down, after authentication.
+  const allowTesting = isTestProject(existingManifest);
+
   const recorded = existingManifest.harnesses;
   if (
     !Array.isArray(recorded) ||
@@ -450,6 +484,18 @@ export async function runImport(argv: string[]): Promise<number> {
   const newPin = resolvePin(spec, existingEntry?.pin);
   const fetchRef = spec.kind === "exact" ? `${name}@${spec.value}` : undefined;
 
+  // 0027-testing-skill-convention.md: to a project that has not opted in,
+  // testing content simply does not exist — the same message and the same
+  // exit code as any name the registry doesn't have. Deciding it here,
+  // after authentication and after AF-4's warnings, is what makes the two
+  // indistinguishable from outside.
+  if (!allowTesting && isTestingSkillName(name)) {
+    console.error(
+      `hatch import: ${unavailableMessage(name, fetchRef, primaryHarness)} — nothing was changed.`,
+    );
+    return 1;
+  }
+
   // UC-3 step 4: classify the target — or, if it's a group, resolve and
   // fetch the whole group atomically (0013, 0016). A group's own folder is
   // never harness-suffixed (unlike a plain skill), so classification reads
@@ -474,7 +520,7 @@ export async function runImport(argv: string[]): Promise<number> {
     // opportunistic group/plain-skill probe).
     if (fetchRef) {
       console.error(
-        `hatch import: "${fetchRef}" was not found in the registry — nothing was changed.`,
+        `hatch import: ${notFoundPinnedMessage(fetchRef)} — nothing was changed.`,
       );
       return 1;
     }
@@ -506,6 +552,16 @@ export async function runImport(argv: string[]): Promise<number> {
     if (!existingEntry && meta.removed) {
       console.error(
         `hatch import: "${name}" is marked removed in the registry and cannot be imported for the first time — nothing was changed.`,
+      );
+      return 1;
+    }
+
+    // 0027-testing-skill-convention.md: the backstop for content that
+    // reached the registry without the reserved prefix, reported exactly as
+    // the name check above reports it.
+    if (!allowTesting && declaresTesting(meta)) {
+      console.error(
+        `hatch import: ${unavailableMessage(name, fetchRef, primaryHarness)} — nothing was changed.`,
       );
       return 1;
     }
@@ -551,6 +607,7 @@ export async function runImport(argv: string[]): Promise<number> {
           meta.version,
           meta.members,
           rootFolderFetch.files,
+          { allowTesting },
         );
         if (!resolveResult.ok) {
           console.error(
@@ -608,7 +665,7 @@ export async function runImport(argv: string[]): Promise<number> {
         );
         if (!folderName) {
           console.error(
-            `hatch import: "${name}" was not found in the registry for harness "${harness}" — nothing was changed.`,
+            `hatch import: ${notFoundForHarnessMessage(name, harness)} — nothing was changed.`,
           );
           return 1;
         }
@@ -735,6 +792,10 @@ export async function runImport(argv: string[]): Promise<number> {
     const manifest = migrateManifest({
       schemaVersion: 1,
       harnesses: sortedHarnesses,
+      // The test-project opt-in survives every rewrite of this manifest
+      // (0027-testing-skill-convention.md) — the manifest is rebuilt from
+      // scratch here, so anything not carried across would be dropped.
+      ...(allowTesting ? { testProject: true } : {}),
       skills: { ...existingSkills, [name]: entry },
     });
     try {
@@ -875,6 +936,10 @@ export async function runImport(argv: string[]): Promise<number> {
     const manifest = migrateManifest({
       schemaVersion: 1,
       harnesses: sortedHarnesses,
+      // The test-project opt-in survives every rewrite of this manifest
+      // (0027-testing-skill-convention.md) — the manifest is rebuilt from
+      // scratch here, so anything not carried across would be dropped.
+      ...(allowTesting ? { testProject: true } : {}),
       skills: {
         ...existingSkills,
         ...skillsUpdate,
@@ -1108,6 +1173,10 @@ async function runAddHarness(
         meta.version,
         meta.members,
         rootFolderFetch.files,
+        // Backfilling content this project already has: a test project's
+        // recorded testing groups re-resolve exactly as ordinary ones do
+        // (0027-testing-skill-convention.md).
+        { allowTesting: isTestProject(existingManifest) },
       );
       if (!resolveResult.ok) {
         console.error(
@@ -1228,6 +1297,10 @@ async function runAddHarness(
     const newManifest = migrateManifest({
       schemaVersion: 1,
       harnesses: newHarnesses,
+      // The test-project opt-in survives every rewrite of this manifest
+      // (0027-testing-skill-convention.md) — the manifest is rebuilt from
+      // scratch here, so anything not carried across would be dropped.
+      ...(isTestProject(existingManifest) ? { testProject: true } : {}),
       skills: newSkills,
     });
     writeFileSync(

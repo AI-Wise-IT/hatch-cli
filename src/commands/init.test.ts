@@ -112,7 +112,7 @@ describe("runInit — main flow", () => {
       ),
     ).toBe("# Hatch Usage");
     expect(readManifest(project)).toEqual({
-      schemaVersion: 3,
+      schemaVersion: 4,
       harnesses: ["claude"],
       skills: { "hatch-usage": { version: "1.0.0" } },
     });
@@ -493,5 +493,153 @@ describe("runInit — version control", () => {
     expect(consoleLogs.some((m) => m.includes("not a git repository"))).toBe(
       false,
     );
+  });
+});
+
+describe("runInit — test-project opt-in (0027)", () => {
+  it("records testProject: true when the flag is given", async () => {
+    const project = await gitProject();
+
+    const exitCode = await runInit([
+      "--path",
+      project,
+      "--harness",
+      "claude",
+      "--test-project",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(readManifest(project).testProject).toBe(true);
+  });
+
+  it("records no testProject field without the flag", async () => {
+    const project = await gitProject();
+
+    const exitCode = await runInit(["--path", project, "--harness", "claude"]);
+
+    expect(exitCode).toBe(0);
+    expect(readManifest(project)).not.toHaveProperty("testProject");
+  });
+
+  it("changes nothing else about initialization", async () => {
+    const plain = await gitProject("plain");
+    const flagged = await gitProject("flagged");
+
+    expect(await runInit(["--path", plain, "--harness", "claude,codex"])).toBe(
+      0,
+    );
+    expect(
+      await runInit([
+        "--path",
+        flagged,
+        "--harness",
+        "claude,codex",
+        "--test-project",
+      ]),
+    ).toBe(0);
+
+    const { testProject, ...flaggedRest } = readManifest(flagged);
+    expect(testProject).toBe(true);
+    // Harness recording, the skill entry and its version are untouched.
+    expect(flaggedRest).toEqual(readManifest(plain));
+
+    // The skill is still placed once per declared harness, with identical
+    // content, and the whole scaffold is still one commit.
+    for (const dir of [".claude", ".codex"]) {
+      expect(
+        readFileSync(
+          join(flagged, dir, "skills", "hatch-usage", "SKILL.md"),
+          "utf8",
+        ),
+      ).toBe("# Hatch Usage");
+    }
+    expect((await simpleGit(flagged).log()).total).toBe(1);
+  });
+});
+
+describe("runInit — --test-project cannot be applied retroactively (0027)", () => {
+  it("warns that the flag had no effect, and leaves the manifest untouched", async () => {
+    const project = await gitProject();
+    expect(await runInit(["--path", project, "--harness", "claude"])).toBe(0);
+    const before = readFileSync(join(project, "hatch.manifest.json"), "utf8");
+
+    const exitCode = await runInit([
+      "--path",
+      project,
+      "--harness",
+      "claude",
+      "--test-project",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      consoleLogs.some(
+        (m) =>
+          m.includes("--test-project had no effect") &&
+          m.includes("already initialized"),
+      ),
+    ).toBe(true);
+    expect(readFileSync(join(project, "hatch.manifest.json"), "utf8")).toBe(
+      before,
+    );
+    expect(readManifest(project)).not.toHaveProperty("testProject");
+  });
+
+  it("warns alongside the undeclared-harness failure too", async () => {
+    const project = await gitProject();
+    expect(await runInit(["--path", project, "--harness", "claude"])).toBe(0);
+
+    const exitCode = await runInit([
+      "--path",
+      project,
+      "--harness",
+      "codex",
+      "--test-project",
+    ]);
+
+    expect(exitCode).toBe(1);
+    expect(
+      consoleLogs.some((m) => m.includes("--test-project had no effect")),
+    ).toBe(true);
+    expect(readManifest(project)).not.toHaveProperty("testProject");
+  });
+
+  it("stays quiet when the project already records the opt-in", async () => {
+    const project = await gitProject();
+    expect(
+      await runInit([
+        "--path",
+        project,
+        "--harness",
+        "claude",
+        "--test-project",
+      ]),
+    ).toBe(0);
+    consoleLogs.length = 0;
+
+    const exitCode = await runInit([
+      "--path",
+      project,
+      "--harness",
+      "claude",
+      "--test-project",
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      consoleLogs.some((m) => m.includes("--test-project had no effect")),
+    ).toBe(false);
+    expect(readManifest(project).testProject).toBe(true);
+  });
+
+  it("stays quiet when the flag was not given at all", async () => {
+    const project = await gitProject();
+    expect(await runInit(["--path", project, "--harness", "claude"])).toBe(0);
+    consoleLogs.length = 0;
+
+    const exitCode = await runInit(["--path", project, "--harness", "claude"]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs.some((m) => m.includes("--test-project"))).toBe(false);
   });
 });

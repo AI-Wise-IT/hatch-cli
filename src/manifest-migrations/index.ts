@@ -2,7 +2,7 @@
 // Every command that reads the manifest routes it through migrateManifest()
 // before using its contents.
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 type Manifest = Record<string, unknown>;
 type Migration = (manifest: Manifest) => Manifest;
@@ -23,6 +23,12 @@ const migrations: Record<number, Migration> = {
   // v2 entries: a skill imported before this batch has no baseline
   // contentHash and no pin until it's next placed or pinned.
   2: (manifest) => manifest,
+  // v3 -> v4 (0027-testing-skill-convention.md): adds an optional top-level
+  // `testProject` boolean marking a project that may import testing content
+  // — purely additive, so this migration is a schema-version bump only.
+  // Nothing is backfilled: a manifest written before this batch has no
+  // `testProject` and reads as an ordinary project, the intended default.
+  3: (manifest) => manifest,
 };
 
 export function migrateManifest(manifest: Manifest): Manifest {

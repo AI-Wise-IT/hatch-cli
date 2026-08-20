@@ -26,7 +26,7 @@ When one `hatch import` operation's unpacked member graph reaches the same skill
 - if the conflicting pins share the same MAJOR version, resolve to the highest pinned version and surface a warning naming every conflicting pin and which one was used; the import proceeds and succeeds.
 - if the conflicting pins differ in MAJOR version, block: abort the whole import — nothing placed, no manifest change, no commit — reporting the skill name and the conflicting pinned versions.
 
-A skill or group's top-level registry folder name is permanent once published: it is never deleted and never renamed. "Removed" (as used in `hatch import`'s deprecation-check flow) means the folder's own metadata is flagged removed/deprecated — the folder and its name continue to exist. The skill-content repo's CI enforces this as a required status check: any PR that causes a previously-existing top-level folder name to disappear or change is blocked.
+A skill or group's top-level registry folder name is permanent once published: it is never deleted and never renamed. The one class of content this does not cover is a testing skill — registry content that exists only to exercise the CLI, marked by a reserved `_` name prefix and a `"testing": true` declaration — which [0027-testing-skill-convention](0027-testing-skill-convention.md) exempts from this rule entirely, in both enforcement modes. Everything below applies to every folder without that marker. "Removed" (as used in `hatch import`'s deprecation-check flow) means the folder's own metadata is flagged removed/deprecated — the folder and its name continue to exist. The skill-content repo's CI enforces this as a required status check: any PR that causes a previously-existing top-level folder name to disappear or change is blocked.
 
 ## Context
 
@@ -66,7 +66,7 @@ UC-3 AF-4 ("deprecated or removed skill/group detected") already assumed "remove
 
 ## Agent Rules
 
-- MUST treat every skill and group folder name in the registry as permanent once published — MUST NOT delete or rename a top-level registry folder under any circumstance.
+- MUST treat every skill and group folder name in the registry as permanent once published — MUST NOT delete or rename a top-level registry folder, unless it is a testing skill as defined by [0027-testing-skill-convention](0027-testing-skill-convention.md), which is exempt.
 - MUST implement "removed" (UC-3 AF-4) as a metadata flag on the existing folder, never as folder deletion.
 - MUST resolve a group's members by following physically-nested content directly and named pointers (to a skill or another group) recursively, deduping by skill name via a visited set — MUST NOT re-place or re-fetch a name already resolved earlier in the same traversal.
 - MUST unpack every group into flat, individual top-level entries in the target harness's skill directory on deployment — MUST NOT copy a group as one nested folder.
@@ -76,16 +76,18 @@ UC-3 AF-4 ("deprecated or removed skill/group detected") already assumed "remove
 
 ## Invariants
 
-- **MUST NOT delete or rename a top-level registry folder once published.** Becomes irreversible once: a real project has imported (or could import) that name — deleting or renaming it would break any future re-import and retroactively invalidate [0014-registry-collision-detection](0014-registry-collision-detection.md)'s collision guarantee. Enforcement mechanism: `hatch-skills`' CI `name-permanence-check` job (required status check). Current mode: **advisory** (`NAME_PERMANENCE_ENFORCEMENT=warn`) as of 2026-08-12 (hatch-skills PR #15) — the check had been accidentally blocking since Batch 2, closing the pre-launch cleanup window before any real cutover was named; downgraded to warn-only on discovery so dev/test-fixture cleanup stays possible, per `docs/build-plan.md`. Move back to blocking at the actual pre-launch hardening cutover.
+- **MUST NOT delete or rename a top-level registry folder once published, except a testing skill ([0027](0027-testing-skill-convention.md)).** Becomes irreversible once: a real project has imported (or could import) that name — deleting or renaming it would break any future re-import and retroactively invalidate [0014-registry-collision-detection](0014-registry-collision-detection.md)'s collision guarantee. Enforcement mechanism: `hatch-skills`' CI `name-permanence-check` job (required status check). Current mode: **advisory** (`NAME_PERMANENCE_ENFORCEMENT=warn`) as of 2026-08-12 (hatch-skills PR #15) — the check had been accidentally blocking since Batch 2, closing the pre-launch cleanup window before any real cutover was named; downgraded to warn-only on discovery so dev/test-fixture cleanup stays possible, per `docs/build-plan.md`. Move back to blocking at the actual pre-launch hardening cutover. The testing-skill exemption is enforcement-mode-independent: a marked folder is skipped by this check in warn and block mode alike.
 - **MUST implement "removed" as a metadata flag, never a folder deletion.** Becomes irreversible once: the same trigger as above — this is the release valve that makes the permanence rule survivable (a mistaken or deprecated publish gets flagged, not deleted). Enforcement mechanism: the same `name-permanence-check` job — a `removed: true` folder that got deleted instead of flagged would itself be caught by that check. Current mode: advisory, same as above.
 
 ## Machine Check
 
 ```bash
-git log --diff-filter=D --name-only --pretty=format: -- '*/skill.json' | sort -u
+git log --diff-filter=D --name-only --pretty=format: -- '*/skill.json' | grep -v '^_' | sort -u
 ```
 
-Expected result: empty — no `skill.json` file (i.e. no top-level skill/group folder) has ever been deleted in the skill-content repo's history. Any output names a folder whose deletion violated this record.
+Expected result: `pre-launch-audit/skill.json` and `pre-launch-harden/skill.json`, and nothing else. Those two were added and then reverted wholesale (`hatch-skills` PR #18 reverting PR #17) while this rule was advisory and no project could yet depend on either name — a deliberate pre-launch retraction, not a violation, and the only one in the repo's history. Any *other* name in the output is a folder whose deletion violated this record.
+
+The `grep -v '^_'` filters testing skills, which [0027-testing-skill-convention](0027-testing-skill-convention.md) exempts — their deletion is expected and carries no meaning here.
 
 ## Precedence
 
@@ -94,4 +96,5 @@ Expected result: empty — no `skill.json` file (i.e. no top-level skill/group f
 - [0014-registry-collision-detection](0014-registry-collision-detection.md)'s soundness depends on this record's name-permanence rule.
 - [0016-group-member-manifest-format](0016-group-member-manifest-format.md) resolves this record's own deferred open item: the concrete file format for a group's member list.
 - [0017-manifest-schema-v2-group-membership](0017-manifest-schema-v2-group-membership.md) resolves this record's own deferred open item: how the project manifest records group membership.
+- [0027-testing-skill-convention](0027-testing-skill-convention.md) narrows this record's name-permanence rule, carving out testing skills; that record governs which content is exempt, this one governs everything else.
 - No known conflicting decision records.
