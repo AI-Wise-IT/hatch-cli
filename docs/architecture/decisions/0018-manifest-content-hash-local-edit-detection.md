@@ -20,7 +20,7 @@ At re-import time, `hatch import` recomputes this same hash from what is current
 
 ## Context
 
-UC-3's AF-3 ("Re-import — local edits present") requires knowing whether placed content still matches what Hatch itself placed, but neither the use case nor any existing ADR defines a mechanism for that comparison — a genuine implementation gap flagged directly in this batch's planning (see `docs/build-plan.md`'s Batch 7 entry: "the concrete mechanism... is undecided and load-bearing"). This gates whether AF-2 (auto-update) or AF-3 (protect local edits) fires on every re-import, so it had to be settled before `hatch import`'s re-import logic could be written.
+UC-3's AF-3 ("Re-import — local edits present") requires knowing whether placed content still matches what Hatch itself placed, but neither the use case nor any existing ADR defines a mechanism for that comparison — a genuine implementation gap flagged directly in the re-import work's planning as undecided and load-bearing. This gates whether AF-2 (auto-update) or AF-3 (protect local edits) fires on every re-import, so it had to be settled before `hatch import`'s re-import logic could be written.
 
 [0010-manifest-schema-migrations](0010-manifest-schema-migrations.md) already establishes the versioned migration-chain mechanism this record's v2->v3 migration is the second real exercise of, following [0017-manifest-schema-v2-group-membership](0017-manifest-schema-v2-group-membership.md)'s v1->v2 precedent. [0017](0017-manifest-schema-v2-group-membership.md) also set the precedent this record follows for *where* a new per-skill fact lives: as an additional field on the existing `skills[name]` manifest entry, not a new file or a separate index.
 
@@ -69,7 +69,7 @@ Expected result: any `hatch.manifest.json` written by a post-Batch-7 `hatch impo
 
 ## Precedence
 
-- Resolves the open item `docs/build-plan.md`'s Batch 7 entry flagged without settling: the concrete local-edit-detection mechanism gating UC-3 AF-2 vs. AF-3.
+- Resolves the open item the re-import work flagged without settling: the concrete local-edit-detection mechanism gating UC-3 AF-2 vs. AF-3.
 - Builds on [0010-manifest-schema-migrations](0010-manifest-schema-migrations.md) (the versioned migration-chain mechanism) and follows the field-placement precedent [0017-manifest-schema-v2-group-membership](0017-manifest-schema-v2-group-membership.md) set (an additive field on the existing `skills[name]` entry, not a new file).
 - Sequenced alongside [0019-registry-removed-metadata-flag](0019-registry-removed-metadata-flag.md) and [0020-standalone-version-pin-manifest-and-parsing](0020-standalone-version-pin-manifest-and-parsing.md), both also Batch 7 gaps resolved in the same developer conversation; this record's v2->v3 migration and 0020's pin field are the same migration (see 0020's Precedence).
 - No known conflicting decision records.

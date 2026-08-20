@@ -7,7 +7,7 @@ npx @ai-wise/hatchcli@latest
 ```
 
 Status: `login`, `init`, `import`, `remove`, and `check-collisions` are implemented — see
-`docs/use-cases/` for behavior and `docs/build-plan.md` for build history.
+`docs/use-cases/` for behavior and `docs/architecture/decisions/` for the decisions behind it.
 
 Point Hatch at a project that already exists: `hatch init --harness claude` writes the
 manifest and places the self-documentation skill, then `hatch import <name>` brings in
