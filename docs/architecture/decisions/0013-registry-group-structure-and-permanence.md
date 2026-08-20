@@ -81,11 +81,15 @@ UC-3 AF-4 ("deprecated or removed skill/group detected") already assumed "remove
 
 ## Machine Check
 
+Run this in the `hatch-skills` checkout. It inspects the registry's own history, so in `hatch-cli` it returns no output and reads as a pass while having verified nothing.
+
 ```bash
-git log --diff-filter=D --name-only --pretty=format: -- '*/skill.json' | grep -v '^_' | sort -u
+git log 11a7618..HEAD --diff-filter=D --name-only --pretty=format: -- '*/skill.json' | grep -v '^_' | sort -u
 ```
 
-Expected result: `pre-launch-audit/skill.json` and `pre-launch-harden/skill.json`, and nothing else. Those two were added and then reverted wholesale (`hatch-skills` PR #18 reverting PR #17) while this rule was advisory and no project could yet depend on either name — a deliberate pre-launch retraction, not a violation, and the only one in the repo's history. Any *other* name in the output is a folder whose deletion violated this record.
+Expected result: no output. Any name printed is a top-level folder whose deletion violated this record.
+
+The range starts at `11a7618` (`hatch-skills` PR #18, reverting PR #17) — the one sanctioned retraction of non-testing content in the repo's history, made while this rule was advisory and no project could yet depend on the names involved. Excluding it by commit rather than by name keeps this record free of an allowlist that would need editing to stay accurate.
 
 The `grep -v '^_'` filters testing skills, which [0027-testing-skill-convention](0027-testing-skill-convention.md) exempts — their deletion is expected and carries no meaning here.
 

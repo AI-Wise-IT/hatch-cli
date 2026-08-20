@@ -61,11 +61,13 @@ During this cluster's conversation, two retrieval approaches were directly compa
 
 ## Machine Check
 
+Run this in the `hatch-skills` checkout. The tags live in the registry repo, so in `hatch-cli` it returns nothing — which would read as the failure described below rather than as the wrong repository.
+
 ```bash
 git tag -l "*@*" | head -5
 ```
 
-Expected result: tags of the form `<name>@<version>` exist in the registry repo — at least one per published skill/group version. An empty result indicates the CI tag-push step isn't wired up.
+Expected result: tags of the form `<name>@<version>` — at least one per published skill/group version. An empty result, run in the registry repo, indicates the CI tag-push step isn't wired up.
 
 ## Precedence
 
