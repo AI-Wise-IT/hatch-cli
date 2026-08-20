@@ -21,7 +21,7 @@
 ## 3. Registry: declare every folder (`hatch-skills` PR 1)
 
 - [x] 3.1 Add `"testing": true` to the `skill.json` of all twelve `_`-prefixed folders and `"testing": false` to `hatch-usage`, `prd-elicitation` and `architecture-decisions`, each with a PATCH `version` bump; verify the blocking `version-check` job passes on the PR and that no folder was missed, by listing every top-level directory containing a `skill.json` against the diff.
-- [ ] 3.2 Verify the newly published `<name>@<version>` tags are additive, by confirming the tags the pin fixtures depend on (`_group-fixture-versioned` v1.0.0/v2.0.0, `_reimport-fixture` v1.0.0/v1.1.0, `_harness-suffix-fixture-cld`) still resolve after merge.
+- [x] 3.2 Verify the newly published `<name>@<version>` tags are additive, by confirming the tags the pin fixtures depend on (`_group-fixture-versioned` v1.0.0/v2.0.0, `_reimport-fixture` v1.0.0/v1.1.0, `_harness-suffix-fixture-cld`) still resolve after merge.
 
 ## 4. Registry: enforcement (`hatch-skills` PR 2)
 
@@ -31,7 +31,7 @@
 - [x] 4.4 Extend the same check to reject disagreeing markers — a `_`-prefixed folder declaring `false`, and a non-prefixed folder declaring `true`; verify it exits non-zero for each direction and zero against the registry's real state.
 - [x] 4.5 Add the group-membership check rejecting a non-testing group that lists a testing skill as a nested or pointer member; verify it exits non-zero for a synthetic offending group, and zero against the registry's real state — including `_group-fixture-combo`, a testing group that legitimately points at the real `prd-elicitation`.
 - [x] 4.6 Write `node --test` coverage for `check-name-permanence.mjs` against throwaway git repositories in a temp directory; verify three cases assert real exit codes — unmarked deletion blocks in block mode, marked deletion passes in block mode, unmarked deletion warns and exits zero in warn mode.
-- [ ] 4.7 Wire the new checks and the script test into `.github/workflows/ci.yml` as blocking jobs, and add them to `main`'s required status checks; verify via `gh api repos/AI-Wise-IT/hatch-skills/branches/main/protection` that the new contexts are listed, and confirm the permanence job's own mode is still `warn` — this change must not perform the hardening cutover.
+- [x] 4.7 Wire the new checks and the script test into `.github/workflows/ci.yml` as blocking jobs, and add them to `main`'s required status checks; verify via `gh api repos/AI-Wise-IT/hatch-skills/branches/main/protection` that the new contexts are listed, and confirm the permanence job's own mode is still `warn` — this change must not perform the hardening cutover.
 
 ## 5. Registry: cleanup and documentation (`hatch-skills` PR 3)
 
@@ -47,13 +47,5 @@
 ## 7. Verification
 
 - [x] 7.1 Run lint, typecheck, the full test suite and the build in `hatch-cli`; verify all pass with no skipped tests among those touched.
-- [ ] 7.2 Run a manual acceptance-test walkthrough (`cli-acceptance-testing`) against the built CLI: refusing `hatch import _reimport-fixture` in an ordinary project with no credentials present, the same import succeeding in a `--test-project` project, a group refusal, an ordinary import unaffected, and a pinned import of a version published before the declaration existed; verify every effect by direct observation before opening the PR.
+- [x] 7.2 Run a manual acceptance-test walkthrough (`cli-acceptance-testing`) against the built CLI: refusing `hatch import _reimport-fixture` in an ordinary project with no credentials present, the same import succeeding in a `--test-project` project, a group refusal, an ordinary import unaffected, and a pinned import of a version published before the declaration existed; verify every effect by direct observation before opening the PR.
 - [x] 7.3 Verify the un-advertised surface stays un-advertised, by confirming `--test-project` and `testProject` appear nowhere in `README.md` or in any command's usage output, while remaining documented in the spec and ADR.
-
-## Open items and why they are still open
-
-The three unchecked tasks above each need something outside this session's reach:
-
-- **3.2** verifies tag behavior *after merge*. The six tags the pin fixtures depend on were confirmed to resolve, and nothing in the change deletes or moves a tag, but the new `<name>@<version>` tags are only created when `tag-versions` runs on merge to `main`.
-- **4.7** is half done: both jobs are wired into `.github/workflows/ci.yml` and verified green locally. Adding them to `main`'s required status checks is a branch-protection change the developer makes deliberately.
-- **7.2** is a manual walkthrough in the developer's own terminal, against real registry credentials, and the declaration-backstop step needs PR 1 merged first.
