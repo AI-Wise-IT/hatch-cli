@@ -31,8 +31,8 @@
 
 ## 6. Make it blocking
 
-- [ ] 6.1 Add the new checks as required status checks on `main` in both repositories, per [0008](../../../docs/architecture/decisions/0008-trunk-based-branch-protection.md). Verify with `gh api` that each repo's required-checks list contains the new contexts.
-- [ ] 6.2 Confirm a violation actually blocks: open a throwaway pull request editing an accepted record's Decision section and verify it cannot merge, then close it.
+- [x] 6.1 Add the new checks as required status checks on `main` in both repositories, per [0008](../../../docs/architecture/decisions/0008-trunk-based-branch-protection.md). Verify with `gh api` that each repo's required-checks list contains the new contexts.
+- [x] 6.2 Confirm a violation actually blocks: open a throwaway pull request editing an accepted record's Decision section and verify it cannot merge, then close it.
 
 ## 7. Close the loop
 
