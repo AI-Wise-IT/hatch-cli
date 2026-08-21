@@ -10,7 +10,7 @@
 
 ## Decision
 
-Vitest is the test runner/framework for the Hatch CLI. Test types in scope for this MVP:
+Jest is the test runner/framework for the Hatch CLI. Test types in scope for this MVP:
 
 - **Unit tests** for pure logic — semver comparison and compatibility rules ([0009-skill-versioning-semver-tags](0009-skill-versioning-semver-tags.md)), manifest schema migrations ([0010-manifest-schema-migrations](0010-manifest-schema-migrations.md)), and harness resolution ([0001-harness-suffix-convention](0001-harness-suffix-convention.md), [0002-cli-runtime-nodejs](0002-cli-runtime-nodejs.md)).
 - **Integration tests** that spawn the built CLI as a subprocess against temporary git repositories, with GitHub API calls mocked (e.g. via `msw` or `nock`).
