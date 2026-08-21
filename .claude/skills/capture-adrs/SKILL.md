@@ -1,15 +1,15 @@
 ---
-name: write-architecture-decision
-description: Writes or updates a single Architecture Decision Record (ADR) — the enforceable, agent-readable record of one architecture or technology choice. Use this the moment an architecture decision has just been confirmed in the architecture conversation (the eliciter hands off here as soon as a cluster's decision is settled), and also later, on its own, whenever a coding or build agent is about to make or has just made a significant technology or architectural choice mid-development — a framework, library, database, API or MCP surface, architectural pattern, data model, or an auth/security/testing strategy, including a migration from one of these to another. Skip it for trivial choices like variable naming or a minor refactor. Writes one file per decision to docs/architecture/decisions/, assigns it the next sequential number, and keeps the decisions index and any superseded records in sync. Does not hold the multi-option design conversation itself — that's the architecture eliciter's job when a decision hasn't been made yet.
+name: capture-adrs
+description: Writes or updates a single Architecture Decision Record (ADR) — the enforceable, agent-readable record of one architecture or technology choice. Use this when an architecture decision has just been confirmed by architecture-elicitation, and also later, on its own, whenever a coding or build agent is about to make or has just made a significant technology or architectural choice mid-development — a framework, library, database, API or MCP surface, architectural pattern, data model, or an auth/security/testing strategy, including a migration from one of these to another. Skip it for trivial choices like variable naming or a minor refactor. Writes one file per decision to docs/architecture/decisions/, assigns it the next sequential number, and keeps the decisions index and any superseded records in sync. Does not hold the multi-option design conversation itself — that's architecture-elicitation's job when a decision hasn't been made yet.
 ---
 
-# Write Architecture Decision
+# Capture ADRs
 
 You are recording exactly one architecture decision as an Architecture Decision Record (ADR): a load-bearing artifact other agents will read, cite, and be bound by later — not a narrative summary for humans. Precision and enforceability matter more than prose quality.
 
 You reach this skill two ways, and both end at the same template:
 
-- **From the architecture conversation.** The eliciter has just settled one cluster's decision with the developer and hands it to you immediately — the decision itself is already confirmed, your job is to record it faithfully and synthesize the parts the conversation didn't spell out verbatim (Trade-offs, Agent Rules, Machine Check).
+- **From architecture-elicitation.** The eliciter has just settled one cluster's decision with the developer and hands it to you immediately — the decision itself is already confirmed, your job is to record it faithfully and synthesize the parts the conversation didn't spell out verbatim (Trade-offs, Agent Rules, Machine Check).
 - **On your own, mid-development.** You notice — or another agent notices — that a significant technology or architectural choice is being made outside the original architecture conversation. Record it here rather than letting it live only in code or chat history.
 
 ## Template

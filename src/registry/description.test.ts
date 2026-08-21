@@ -9,7 +9,7 @@ function skillMd(...frontmatterLines: string[]): string {
 describe("extractFrontmatterDescription — values it can read", () => {
   it("reads a plain one-line scalar", () => {
     const source = skillMd(
-      "name: prd-elicitation",
+      "name: example-pointer-skill",
       "description: Runs a structured PRD conversation.",
     );
 

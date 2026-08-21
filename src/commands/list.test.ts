@@ -252,7 +252,7 @@ describe("runList — argument errors (2.1)", () => {
 describe("runList — authentication (2.2)", () => {
   it("lists with an already-present session, without prompting", async () => {
     mockRegistry({
-      "prd-elicitation": {
+      "example-pointer-skill": {
         skillJson: { version: "1.0.0" },
         skillMd: skillMd("Runs a PRD conversation."),
       },
@@ -263,7 +263,7 @@ describe("runList — authentication (2.2)", () => {
     expect(exitCode).toBe(0);
     expect(promptHidden).not.toHaveBeenCalled();
     expect(listRegistryRoot).toHaveBeenCalledWith("existing-session-token");
-    expect(listedNames()).toEqual(["prd-elicitation"]);
+    expect(listedNames()).toEqual(["example-pointer-skill"]);
   });
 
   it("authenticates before reading the registry when no session is present", async () => {
@@ -271,7 +271,7 @@ describe("runList — authentication (2.2)", () => {
     vi.mocked(promptHidden).mockResolvedValue("fresh-token");
     vi.mocked(validateGitHubToken).mockResolvedValue({ valid: true });
     mockRegistry({
-      "prd-elicitation": {
+      "example-pointer-skill": {
         skillJson: { version: "1.0.0" },
         skillMd: skillMd("Runs a PRD conversation."),
       },
@@ -283,7 +283,7 @@ describe("runList — authentication (2.2)", () => {
     expect(promptHidden).toHaveBeenCalledTimes(1);
     expect(writeCredentials).toHaveBeenCalledWith("fresh-token");
     expect(listRegistryRoot).toHaveBeenCalledWith("fresh-token");
-    expect(listedNames()).toEqual(["prd-elicitation"]);
+    expect(listedNames()).toEqual(["example-pointer-skill"]);
   });
 
   it("aborts on an invalid password before any registry read", async () => {
@@ -293,7 +293,9 @@ describe("runList — authentication (2.2)", () => {
       valid: false,
       reason: "GitHub rejected the token as invalid or expired",
     });
-    mockRegistry({ "prd-elicitation": { skillJson: { version: "1.0.0" } } });
+    mockRegistry({
+      "example-pointer-skill": { skillJson: { version: "1.0.0" } },
+    });
 
     const exitCode = await runList([]);
 
@@ -314,7 +316,7 @@ describe("runList — authentication (2.2)", () => {
 describe("runList — the test-project opt-in (2.3)", () => {
   function seedTwoEntryRegistry() {
     mockRegistry({
-      "prd-elicitation": {
+      "example-pointer-skill": {
         skillJson: { version: "1.0.0" },
         skillMd: skillMd("Runs a PRD conversation."),
       },
@@ -332,7 +334,7 @@ describe("runList — the test-project opt-in (2.3)", () => {
     const exitCode = await runList([]);
 
     expect(exitCode).toBe(0);
-    expect(listedNames()).toEqual(["prd-elicitation"]);
+    expect(listedNames()).toEqual(["example-pointer-skill"]);
     const output = [...consoleLogs, ...consoleErrors].join("\n");
     expect(output).not.toContain("_harness-suffix-fixture");
     expect(output).not.toContain("withheld");
@@ -349,7 +351,7 @@ describe("runList — the test-project opt-in (2.3)", () => {
     expect(exitCode).toBe(0);
     expect(listedNames()).toEqual([
       "_harness-suffix-fixture",
-      "prd-elicitation",
+      "example-pointer-skill",
     ]);
     // Shown with the same four fields as any other entry.
     expect(rows()[0]).toEqual([
@@ -371,7 +373,7 @@ describe("runList — the test-project opt-in (2.3)", () => {
     expect(output).not.toContain("hatch init");
     expect(output).not.toContain("manifest");
     // Read as a project without the opt-in would see the registry.
-    expect(listedNames()).toEqual(["prd-elicitation"]);
+    expect(listedNames()).toEqual(["example-pointer-skill"]);
   });
 
   it("treats an unreadable manifest as an ordinary project rather than an error", async () => {
@@ -382,7 +384,7 @@ describe("runList — the test-project opt-in (2.3)", () => {
 
     expect(exitCode).toBe(0);
     expect(consoleErrors).toEqual([]);
-    expect(listedNames()).toEqual(["prd-elicitation"]);
+    expect(listedNames()).toEqual(["example-pointer-skill"]);
   });
 });
 
@@ -497,21 +499,25 @@ describe("runList — a folded family reads the plain folder (2.4)", () => {
 // 2.5 — the name filter and the `_`-prefix exclusion, before any fetch.
 
 describe("filterCandidateNames — name-only exclusions (2.5)", () => {
-  const names = ["prd-elicitation", "brainstorm", "_harness-suffix-fixture"];
+  const names = [
+    "example-pointer-skill",
+    "brainstorm",
+    "_harness-suffix-fixture",
+  ];
 
   it("matches a case-insensitive substring of the name", () => {
-    expect(filterCandidateNames(names, "PRD", false)).toEqual([
-      "prd-elicitation",
+    expect(filterCandidateNames(names, "POINTER", false)).toEqual([
+      "example-pointer-skill",
     ]);
-    expect(filterCandidateNames(names, "prd-elicit", false)).toEqual([
-      "prd-elicitation",
+    expect(filterCandidateNames(names, "pointer-skill", false)).toEqual([
+      "example-pointer-skill",
     ]);
     expect(filterCandidateNames(names, "STORM", false)).toEqual(["brainstorm"]);
   });
 
   it("keeps every ordinary name when no filter is given", () => {
     expect(filterCandidateNames(names, undefined, false)).toEqual([
-      "prd-elicitation",
+      "example-pointer-skill",
       "brainstorm",
     ]);
   });
@@ -530,7 +536,7 @@ describe("filterCandidateNames — name-only exclusions (2.5)", () => {
 describe("runList — the filter runs before the fetches (2.5)", () => {
   it("fetches metadata only for the candidates the filter left standing", async () => {
     mockRegistry({
-      "prd-elicitation": {
+      "example-pointer-skill": {
         skillJson: { version: "1.0.0" },
         skillMd: skillMd("Runs a PRD conversation."),
       },
@@ -548,13 +554,13 @@ describe("runList — the filter runs before the fetches (2.5)", () => {
       },
     });
 
-    const exitCode = await runList(["prd"]);
+    const exitCode = await runList(["pointer"]);
 
     expect(exitCode).toBe(0);
-    expect(listedNames()).toEqual(["prd-elicitation"]);
+    expect(listedNames()).toEqual(["example-pointer-skill"]);
     expect(fetchedPaths()).toEqual([
-      "prd-elicitation/skill.json",
-      "prd-elicitation/SKILL.md",
+      "example-pointer-skill/skill.json",
+      "example-pointer-skill/SKILL.md",
     ]);
   });
 

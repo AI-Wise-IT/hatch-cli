@@ -1,11 +1,11 @@
 ---
-name: design-architecture-decision
-description: Runs a structured, conversational process to settle every architecture and technology decision a project needs, using a completed PRD (and use cases, if they exist) as input. Use this once requirements exist and the user wants to decide the tech stack, pick an architecture, or talk through technology choices — "what should we build this with," "let's figure out the architecture," "help me pick a stack." Reads intake/product-requirements.md and docs/use-cases/ for grounding and its own bundled reference menu of candidate components (never a checklist to walk mechanically), proposes which components apply and how they cluster into interdependent groups, then works through each cluster proposing genuine options and settling on one with the user. Every settled decision is handed immediately to write-architecture-decision to record as an ADR — this skill never writes the decision file itself. Does not decide what ships in the MVP or how work gets sequenced — those are earlier steps — and does not implement anything.
+name: architecture-elicitation
+description: Runs a structured, conversational process to settle every architecture and technology decision a project needs, using a completed PRD (and use cases, if they exist) as input. Use this as part of the architecture-decisions bundle once requirements exist and the user wants to decide the tech stack, pick an architecture, or talk through technology choices — "what should we build this with," "let's figure out the architecture," "help me pick a stack." Reads intake/product-requirements.md and docs/use-cases/ for grounding and its own bundled reference menu of candidate components (never a checklist to walk mechanically), proposes which components apply and how they cluster into interdependent groups, then works through each cluster proposing genuine options and settling on one with the user. Every settled decision is handed immediately to capture-adrs to record as an ADR — this skill never writes the decision file itself. Does not decide what ships in the MVP or how work gets sequenced — those are earlier steps — and does not implement anything.
 ---
 
-# Design Architecture Decision
+# Architecture Elicitation
 
-You are working through every architecture and technology decision this project needs, in conversation with the user. The PRD and use cases already decided *what* the project does; this step decides *how* it's built. Every settled decision is handed to `write-architecture-decision` the moment it's confirmed — you never write the record yourself.
+You are working through every architecture and technology decision this project needs, in conversation with the user. The PRD and use cases already decided *what* the project does; this step decides *how* it's built. Every settled decision is handed to `capture-adrs` the moment it's confirmed — you never write the record yourself.
 
 ## Inputs
 
@@ -38,7 +38,7 @@ Work the clusters in the confirmed order. For each one:
 2. **Load current practice.** Before proposing anything, locate the `expert-reference` skill and use it rather than proposing from memory or improvisation. Run a couple of targeted searches on current practice for this component and stack combination. Keep "what practitioners are actually doing right now" separate from "what this project's constraints require" — say which is which, so the user can push back on either independently.
 3. **Propose options.** Offer two or three genuine options — or state plainly that the choice is mandated with no real alternative, and cite the constraint that mandates it. Score each option against four axes: **prompt coherence**, **failure surface**, **reversibility**, **operational simplicity**. Never fabricate an option just to have three.
 4. **Confirm explicitly.** Silence is not agreement. Let the user challenge the axis scoring itself, not just the choice — re-propose if they do.
-5. **Hand off immediately.** The moment the cluster is settled, invoke `write-architecture-decision` with the confirmed decision, its alternatives, and why they lost. Do this before moving to the next cluster — don't batch decisions to the end of the conversation.
+5. **Hand off immediately.** The moment the cluster is settled, invoke `capture-adrs` with the confirmed decision, its alternatives, and why they lost. Do this before moving to the next cluster — don't batch decisions to the end of the conversation.
 
 ## Throughout
 
@@ -49,7 +49,7 @@ Work the clusters in the confirmed order. For each one:
 
 ## Output
 
-This skill writes nothing itself. Every settled cluster is recorded by `write-architecture-decision` as it's confirmed, one ADR per component. Once every cluster in the map is settled and nothing new has surfaced, close the conversation by listing every ADR written this session — path and one-line decision each.
+This skill writes nothing itself. Every settled cluster is recorded by `capture-adrs` as it's confirmed, one ADR per component. Once every cluster in the map is settled and nothing new has surfaced, close the conversation by listing every ADR written this session — path and one-line decision each.
 
 Before closing, verify:
 

@@ -1,6 +1,6 @@
 ---
 name: plan-build-batches
-description: Decomposes the remaining, non-infrastructure part of a scoped, architected MVP into an ordered sequence of small, human-verifiable build batches, grouping the confirmed use cases (and their alternative flows) using the independently-implementable + reviewable-as-a-coherent-whole test. Run this after build-infrastructure-batch has already built and recorded Batch 1 — this skill picks up from docs/build-plan.md rather than deciding whether infrastructure comes first, since that's not a judgment call. Use this once MVP scoping (docs/use-cases/), architecture decisions (docs/architecture/decisions/), and the infrastructure batch are all settled and the developer wants to sequence the rest of the build — "how do we break the rest of this into batches," "what do we build after the skeleton," "sequence the remaining use cases," "extend the build plan." Produces a written batch plan (one entry per batch: contents, dependency rationale, human-verification method) gated on explicit developer confirmation before any batch starts. Does not build anything itself. Does not re-litigate scope or architecture decisions; if sequencing reveals a missing decision, defer to mvp-scoping or write-architecture-decision instead of deciding it inline.
+description: Decomposes the remaining, non-infrastructure part of a scoped, architected MVP into an ordered sequence of small, human-verifiable build batches, grouping the confirmed use cases (and their alternative flows) using the independently-implementable + reviewable-as-a-coherent-whole test. Run this after build-infrastructure-batch has already built and recorded Batch 1 — this skill picks up from docs/build-plan.md rather than deciding whether infrastructure comes first, since that's not a judgment call. Use this once MVP scoping (docs/use-cases/), architecture decisions (docs/architecture/decisions/), and the infrastructure batch are all settled and the developer wants to sequence the rest of the build — "how do we break the rest of this into batches," "what do we build after the skeleton," "sequence the remaining use cases," "extend the build plan." Produces a written batch plan (one entry per batch: contents, dependency rationale, human-verification method) gated on explicit developer confirmation before any batch starts. Does not build anything itself. Does not re-litigate scope or architecture decisions; if sequencing reveals a missing decision, defer to mvp-scoping or capture-adrs instead of deciding it inline.
 ---
 
 # Plan Build Batches
@@ -17,7 +17,7 @@ Read before proposing anything:
 - `docs/architecture/decisions/` and its `README.md` index — every accepted ADR, so a proposed batch never conflicts with a settled decision. Also check each record's `## Invariants` section, if present: any entry there means this build plan must end with a pre-launch hardening batch (see `references/batching-criteria.md`).
 - `references/batching-criteria.md` in this skill — the distilled rules this skill applies and the reasoning behind them. Read it before proposing anything; don't re-derive the criteria from scratch.
 
-If a use case is missing or unwritten, or an architecture decision affecting an in-scope use case is still `proposed` or absent, stop and point the developer at `mvp-scoping` or `write-architecture-decision` first. Do not sequence around a gap.
+If a use case is missing or unwritten, or an architecture decision affecting an in-scope use case is still `proposed` or absent, stop and point the developer at `mvp-scoping` or `capture-adrs` first. Do not sequence around a gap.
 
 ## Phase 1 — Confirm the foundation
 
@@ -48,7 +48,7 @@ Append the confirmed batches to `docs/build-plan.md`, after the existing Batch 1
 
 ## Throughout
 
-This skill makes no scope or architecture decisions. If sequencing surfaces a scope gap (a use case implies something never decided) or an architecture gap (a batch needs a technology choice no ADR covers), stop and flag it to `mvp-scoping` or `write-architecture-decision`. Do not decide it here to keep moving.
+This skill makes no scope or architecture decisions. If sequencing surfaces a scope gap (a use case implies something never decided) or an architecture gap (a batch needs a technology choice no ADR covers), stop and flag it to `mvp-scoping` or `capture-adrs`. Do not decide it here to keep moving.
 
 All output must be in English.
 

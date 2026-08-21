@@ -57,7 +57,7 @@ describe("checkRegistryCollisions", () => {
 
   it("reports no collisions for independent standalone skills", async () => {
     writeStandaloneSkill(dir, "handover");
-    writeStandaloneSkill(dir, "prd-elicitation");
+    writeStandaloneSkill(dir, "example-pointer-skill");
     const result = await checkRegistryCollisions(dir);
     expect(result.ok).toBe(true);
   });

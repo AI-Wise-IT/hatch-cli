@@ -66,7 +66,7 @@ describe("parseGroupSkillJson", () => {
   it("treats a declared-false folder as ordinary content", () => {
     const result = parseGroupSkillJson(
       JSON.stringify({ version: "1.0.0", testing: false }),
-      "prd-elicitation",
+      "example-pointer-skill",
     );
     expect(result.testing).toBeUndefined();
   });
@@ -230,7 +230,7 @@ describe("resolveGroupMembers — pointer members", () => {
       "token",
       "my-group",
       "1.0.0",
-      [{ kind: "pointer", name: "prd-elicitation" }],
+      [{ kind: "pointer", name: "example-pointer-skill" }],
       new Map([["skill.json", skillJson("1.0.0")]]),
     );
 
@@ -238,14 +238,14 @@ describe("resolveGroupMembers — pointer members", () => {
     if (!result.ok) throw new Error("expected ok");
     expect(result.members).toEqual([
       {
-        name: "prd-elicitation",
+        name: "example-pointer-skill",
         version: "2.3.0",
         files: new Map([["SKILL.md", "# standalone"]]),
       },
     ]);
     expect(fetchRegistryFolder).toHaveBeenCalledWith(
       "token",
-      "prd-elicitation",
+      "example-pointer-skill",
       undefined,
     );
   });
