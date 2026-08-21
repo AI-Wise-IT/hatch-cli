@@ -112,23 +112,23 @@ afterEach(() => {
 
 describe("runRemove — main flow", () => {
   it("removes a standalone skill's placed content and manifest entry under every declared harness, one commit", async () => {
-    const hash = placeSkill(".claude", "hatch-usage", {
-      "SKILL.md": "# Hatch Usage",
+    const hash = placeSkill(".claude", "example-skill", {
+      "SKILL.md": "# Example Skill",
     });
-    placeSkill(".codex", "hatch-usage", { "SKILL.md": "# Hatch Usage" });
-    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } }, [
-      "claude",
-      "codex",
-    ]);
+    placeSkill(".codex", "example-skill", { "SKILL.md": "# Example Skill" });
+    writeManifest(
+      { "example-skill": { version: "1.0.0", contentHash: hash } },
+      ["claude", "codex"],
+    );
     await commitAll("seed");
 
-    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+    const exitCode = await runRemove(["example-skill", "--path", target]);
 
     expect(exitCode).toBe(0);
-    expect(existsSync(join(target, ".claude", "skills", "hatch-usage"))).toBe(
+    expect(existsSync(join(target, ".claude", "skills", "example-skill"))).toBe(
       false,
     );
-    expect(existsSync(join(target, ".codex", "skills", "hatch-usage"))).toBe(
+    expect(existsSync(join(target, ".codex", "skills", "example-skill"))).toBe(
       false,
     );
     const manifest = JSON.parse(
@@ -143,7 +143,7 @@ describe("runRemove — main flow", () => {
 
 describe("runRemove — AF-1: not imported", () => {
   it("no-ops when there is no manifest at all", async () => {
-    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+    const exitCode = await runRemove(["example-skill", "--path", target]);
     expect(exitCode).toBe(0);
     expect(consoleLogs.some((l) => l.includes("never imported"))).toBe(true);
   });
@@ -159,16 +159,16 @@ describe("runRemove — AF-1: not imported", () => {
   });
 
   it("re-running remove for an already-removed name is still a no-op", async () => {
-    const hash = placeSkill(".claude", "hatch-usage", {
-      "SKILL.md": "# Hatch Usage",
+    const hash = placeSkill(".claude", "example-skill", {
+      "SKILL.md": "# Example Skill",
     });
-    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } });
+    writeManifest({ "example-skill": { version: "1.0.0", contentHash: hash } });
     await commitAll("seed");
 
-    const first = await runRemove(["hatch-usage", "--path", target]);
+    const first = await runRemove(["example-skill", "--path", target]);
     expect(first).toBe(0);
 
-    const second = await runRemove(["hatch-usage", "--path", target]);
+    const second = await runRemove(["example-skill", "--path", target]);
     expect(second).toBe(0);
     expect(consoleLogs.some((l) => l.includes("never imported"))).toBe(true);
 
@@ -181,18 +181,18 @@ describe("runRemove — AF-2: content missing on disk", () => {
   it("without a flag: aborts, reports the discrepancy, leaves the manifest entry in place", async () => {
     // Manifest records it, but nothing was ever placed on disk.
     writeManifest({
-      "hatch-usage": { version: "1.0.0", contentHash: "deadbeef" },
+      "example-skill": { version: "1.0.0", contentHash: "deadbeef" },
     });
     await commitAll("seed");
 
-    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+    const exitCode = await runRemove(["example-skill", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(consoleLogs.some((l) => l.includes("missing from disk"))).toBe(true);
     const manifest = JSON.parse(
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
-    expect(manifest.skills["hatch-usage"]).toBeDefined();
+    expect(manifest.skills["example-skill"]).toBeDefined();
 
     const log = await simpleGit(target).log();
     expect(log.total).toBe(1); // no new commit
@@ -200,12 +200,12 @@ describe("runRemove — AF-2: content missing on disk", () => {
 
   it("--force-all drops the stale manifest entry despite the missing content", async () => {
     writeManifest({
-      "hatch-usage": { version: "1.0.0", contentHash: "deadbeef" },
+      "example-skill": { version: "1.0.0", contentHash: "deadbeef" },
     });
     await commitAll("seed");
 
     const exitCode = await runRemove([
-      "hatch-usage",
+      "example-skill",
       "--path",
       target,
       "--force-all",
@@ -221,55 +221,57 @@ describe("runRemove — AF-2: content missing on disk", () => {
 
 describe("runRemove — AF-3: local edits present", () => {
   it("without a flag: aborts, reports the edit, leaves content and manifest untouched", async () => {
-    placeSkill(".claude", "hatch-usage", { "SKILL.md": "# Hatch Usage" });
+    placeSkill(".claude", "example-skill", { "SKILL.md": "# Example Skill" });
     // Wrong stored hash simulates a hand-edit since import.
     writeManifest({
-      "hatch-usage": { version: "1.0.0", contentHash: "not-the-real-hash" },
+      "example-skill": { version: "1.0.0", contentHash: "not-the-real-hash" },
     });
     await commitAll("seed");
 
-    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+    const exitCode = await runRemove(["example-skill", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(consoleLogs.some((l) => l.includes("local edits"))).toBe(true);
     expect(
-      existsSync(join(target, ".claude", "skills", "hatch-usage", "SKILL.md")),
+      existsSync(
+        join(target, ".claude", "skills", "example-skill", "SKILL.md"),
+      ),
     ).toBe(true);
     const manifest = JSON.parse(
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
-    expect(manifest.skills["hatch-usage"]).toBeDefined();
+    expect(manifest.skills["example-skill"]).toBeDefined();
   });
 
   it("--force-all removes it anyway", async () => {
-    placeSkill(".claude", "hatch-usage", { "SKILL.md": "# Hatch Usage" });
+    placeSkill(".claude", "example-skill", { "SKILL.md": "# Example Skill" });
     writeManifest({
-      "hatch-usage": { version: "1.0.0", contentHash: "not-the-real-hash" },
+      "example-skill": { version: "1.0.0", contentHash: "not-the-real-hash" },
     });
     await commitAll("seed");
 
     const exitCode = await runRemove([
-      "hatch-usage",
+      "example-skill",
       "--path",
       target,
       "--force-all",
     ]);
 
     expect(exitCode).toBe(0);
-    expect(existsSync(join(target, ".claude", "skills", "hatch-usage"))).toBe(
+    expect(existsSync(join(target, ".claude", "skills", "example-skill"))).toBe(
       false,
     );
   });
 
   it("--force-clean on a standalone target removes nothing, since the only item is the dirty one", async () => {
-    placeSkill(".claude", "hatch-usage", { "SKILL.md": "# Hatch Usage" });
+    placeSkill(".claude", "example-skill", { "SKILL.md": "# Example Skill" });
     writeManifest({
-      "hatch-usage": { version: "1.0.0", contentHash: "not-the-real-hash" },
+      "example-skill": { version: "1.0.0", contentHash: "not-the-real-hash" },
     });
     await commitAll("seed");
 
     const exitCode = await runRemove([
-      "hatch-usage",
+      "example-skill",
       "--path",
       target,
       "--force-clean",
@@ -277,7 +279,9 @@ describe("runRemove — AF-3: local edits present", () => {
 
     expect(exitCode).toBe(0);
     expect(
-      existsSync(join(target, ".claude", "skills", "hatch-usage", "SKILL.md")),
+      existsSync(
+        join(target, ".claude", "skills", "example-skill", "SKILL.md"),
+      ),
     ).toBe(true);
     expect(consoleLogs.some((l) => l.includes("nothing removed"))).toBe(true);
   });
@@ -409,25 +413,25 @@ describe("runRemove — group removal", () => {
 
 describe("runRemove — AF-5: drop a harness", () => {
   it("removes the harness's placed content for every standalone skill and group member, drops it from the manifest, one commit — leaving other harnesses untouched", async () => {
-    const claudeHash = placeSkill(".claude", "hatch-usage", {
-      "SKILL.md": "# Hatch Usage",
+    const claudeHash = placeSkill(".claude", "example-skill", {
+      "SKILL.md": "# Example Skill",
     });
-    placeSkill(".codex", "hatch-usage", { "SKILL.md": "# Hatch Usage" });
-    placeSkill(".claude", "design-architecture-decision", {
+    placeSkill(".codex", "example-skill", { "SKILL.md": "# Example Skill" });
+    placeSkill(".claude", "example-member", {
       "SKILL.md": "# A",
     });
-    placeSkill(".codex", "design-architecture-decision", { "SKILL.md": "# A" });
+    placeSkill(".codex", "example-member", { "SKILL.md": "# A" });
     writeManifest(
       {
-        "hatch-usage": { version: "1.0.0", contentHash: claudeHash },
-        "design-architecture-decision": {
+        "example-skill": { version: "1.0.0", contentHash: claudeHash },
+        "example-member": {
           version: "1.0.0",
-          group: "architecture-decisions",
+          group: "example-group",
           contentHash: hashDiskTree(
-            join(target, ".claude", "skills", "design-architecture-decision"),
+            join(target, ".claude", "skills", "example-member"),
           ),
         },
-        "architecture-decisions": { version: "1.0.0" },
+        "example-group": { version: "1.0.0" },
       },
       ["claude", "codex"],
     );
@@ -436,21 +440,17 @@ describe("runRemove — AF-5: drop a harness", () => {
     const exitCode = await runRemove(["--harness", "codex", "--path", target]);
 
     expect(exitCode).toBe(0);
-    expect(existsSync(join(target, ".codex", "skills", "hatch-usage"))).toBe(
+    expect(existsSync(join(target, ".codex", "skills", "example-skill"))).toBe(
       false,
     );
-    expect(
-      existsSync(
-        join(target, ".codex", "skills", "design-architecture-decision"),
-      ),
-    ).toBe(false);
-    expect(existsSync(join(target, ".claude", "skills", "hatch-usage"))).toBe(
+    expect(existsSync(join(target, ".codex", "skills", "example-member"))).toBe(
+      false,
+    );
+    expect(existsSync(join(target, ".claude", "skills", "example-skill"))).toBe(
       true,
     );
     expect(
-      existsSync(
-        join(target, ".claude", "skills", "design-architecture-decision"),
-      ),
+      existsSync(join(target, ".claude", "skills", "example-member")),
     ).toBe(true);
 
     const manifest = JSON.parse(
@@ -460,9 +460,9 @@ describe("runRemove — AF-5: drop a harness", () => {
     // Content untouched — dropping a harness never touches the manifest's
     // skills entries, only the harnesses array (0023).
     expect(Object.keys(manifest.skills).sort()).toEqual([
-      "architecture-decisions",
-      "design-architecture-decision",
-      "hatch-usage",
+      "example-group",
+      "example-member",
+      "example-skill",
     ]);
 
     const log = await simpleGit(target).log();
@@ -471,20 +471,20 @@ describe("runRemove — AF-5: drop a harness", () => {
   });
 
   it("removes the harness's content unconditionally, even when it has local edits — no flag needed, per 0023", async () => {
-    const hash = placeSkill(".claude", "hatch-usage", {
-      "SKILL.md": "# Hatch Usage",
+    const hash = placeSkill(".claude", "example-skill", {
+      "SKILL.md": "# Example Skill",
     });
-    placeSkill(".codex", "hatch-usage", { "SKILL.md": "# Hatch Usage" });
-    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } }, [
-      "claude",
-      "codex",
-    ]);
+    placeSkill(".codex", "example-skill", { "SKILL.md": "# Example Skill" });
+    writeManifest(
+      { "example-skill": { version: "1.0.0", contentHash: hash } },
+      ["claude", "codex"],
+    );
     await commitAll("seed");
 
     // Hand-edit the codex-side content — hatch remove --harness must not
     // care, since AF-5 has no drift/local-edit gating at all.
     writeFileSync(
-      join(target, ".codex", "skills", "hatch-usage", "SKILL.md"),
+      join(target, ".codex", "skills", "example-skill", "SKILL.md"),
       "# Hand-edited",
       "utf8",
     );
@@ -492,18 +492,19 @@ describe("runRemove — AF-5: drop a harness", () => {
     const exitCode = await runRemove(["--harness", "codex", "--path", target]);
 
     expect(exitCode).toBe(0);
-    expect(existsSync(join(target, ".codex", "skills", "hatch-usage"))).toBe(
+    expect(existsSync(join(target, ".codex", "skills", "example-skill"))).toBe(
       false,
     );
   });
 
   it("refuses to drop the project's only declared harness", async () => {
-    const hash = placeSkill(".claude", "hatch-usage", {
-      "SKILL.md": "# Hatch Usage",
+    const hash = placeSkill(".claude", "example-skill", {
+      "SKILL.md": "# Example Skill",
     });
-    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } }, [
-      "claude",
-    ]);
+    writeManifest(
+      { "example-skill": { version: "1.0.0", contentHash: hash } },
+      ["claude"],
+    );
     await commitAll("seed");
 
     const exitCode = await runRemove(["--harness", "claude", "--path", target]);
@@ -514,7 +515,7 @@ describe("runRemove — AF-5: drop a harness", () => {
         l.includes("must always declare at least one harness"),
       ),
     ).toBe(true);
-    expect(existsSync(join(target, ".claude", "skills", "hatch-usage"))).toBe(
+    expect(existsSync(join(target, ".claude", "skills", "example-skill"))).toBe(
       true,
     );
     const log = await simpleGit(target).log();
@@ -554,14 +555,14 @@ describe("runRemove — AF-5: drop a harness", () => {
   it("recomputes contentHash against the new primary harness when dropping the old primary, so a later local-edit check isn't misled", async () => {
     // claude sorts before codex, so claude starts primary. Give it content
     // that differs from codex's own placed content (as harness-suffix
-    // resolution legitimately can produce) — hatch-usage's manifest
+    // resolution legitimately can produce) — example-skill's manifest
     // contentHash is recorded from claude's (primary) content.
-    const claudeHash = placeSkill(".claude", "hatch-usage", {
+    const claudeHash = placeSkill(".claude", "example-skill", {
       "SKILL.md": "# Claude variant",
     });
-    placeSkill(".codex", "hatch-usage", { "SKILL.md": "# Codex variant" });
+    placeSkill(".codex", "example-skill", { "SKILL.md": "# Codex variant" });
     writeManifest(
-      { "hatch-usage": { version: "1.0.0", contentHash: claudeHash } },
+      { "example-skill": { version: "1.0.0", contentHash: claudeHash } },
       ["claude", "codex"],
     );
     await commitAll("seed");
@@ -571,13 +572,13 @@ describe("runRemove — AF-5: drop a harness", () => {
     const dropExit = await runRemove(["--harness", "claude", "--path", target]);
     expect(dropExit).toBe(0);
 
-    // A later remove of hatch-usage must see it as clean (not falsely
+    // A later remove of example-skill must see it as clean (not falsely
     // "edited") — the hash must have been recomputed against codex's own
     // untouched content, not left pointing at claude's now-deleted content.
-    const removeExit = await runRemove(["hatch-usage", "--path", target]);
+    const removeExit = await runRemove(["example-skill", "--path", target]);
     expect(removeExit).toBe(0);
     expect(consoleLogs.some((l) => l.includes("has local edits"))).toBe(false);
-    expect(existsSync(join(target, ".codex", "skills", "hatch-usage"))).toBe(
+    expect(existsSync(join(target, ".codex", "skills", "example-skill"))).toBe(
       false,
     );
   });
@@ -586,7 +587,7 @@ describe("runRemove — AF-5: drop a harness", () => {
 describe("runRemove — argument handling", () => {
   it("rejects combining --force-all and --force-clean", async () => {
     const exitCode = await runRemove([
-      "hatch-usage",
+      "example-skill",
       "--path",
       target,
       "--force-all",
@@ -605,7 +606,7 @@ describe("runRemove — argument handling", () => {
 
   it("rejects an unrecognized option", async () => {
     const exitCode = await runRemove([
-      "hatch-usage",
+      "example-skill",
       "--path",
       target,
       "--bogus",
@@ -618,7 +619,7 @@ describe("runRemove — argument handling", () => {
 
   it("rejects combining --harness with a skill/group name", async () => {
     const exitCode = await runRemove([
-      "hatch-usage",
+      "example-skill",
       "--path",
       target,
       "--harness",
@@ -646,7 +647,7 @@ describe("runRemove — argument handling", () => {
 
   it("rejects a target project path that doesn't exist", async () => {
     const exitCode = await runRemove([
-      "hatch-usage",
+      "example-skill",
       "--path",
       join(tempParent, "does-not-exist"),
     ]);
@@ -662,10 +663,10 @@ describe("runRemove — rollback on partial failure", () => {
   // placed under both declared harnesses.
   function placeRichSkill(): void {
     for (const harnessDir of [".claude", ".codex"]) {
-      const dir = join(target, harnessDir, "skills", "hatch-usage");
+      const dir = join(target, harnessDir, "skills", "example-skill");
       mkdirSync(join(dir, "references", "deep"), { recursive: true });
       mkdirSync(join(dir, "assets"), { recursive: true });
-      writeFileSync(join(dir, "SKILL.md"), "# Hatch Usage", "utf8");
+      writeFileSync(join(dir, "SKILL.md"), "# Example Skill", "utf8");
       writeFileSync(
         join(dir, "references", "deep", "notes.md"),
         "reference notes",
@@ -677,8 +678,10 @@ describe("runRemove — rollback on partial failure", () => {
 
   function expectFullyRestored(): void {
     for (const harnessDir of [".claude", ".codex"]) {
-      const dir = join(target, harnessDir, "skills", "hatch-usage");
-      expect(readFileSync(join(dir, "SKILL.md"), "utf8")).toBe("# Hatch Usage");
+      const dir = join(target, harnessDir, "skills", "example-skill");
+      expect(readFileSync(join(dir, "SKILL.md"), "utf8")).toBe(
+        "# Example Skill",
+      );
       expect(
         readFileSync(join(dir, "references", "deep", "notes.md"), "utf8"),
       ).toBe("reference notes");
@@ -691,11 +694,13 @@ describe("runRemove — rollback on partial failure", () => {
   it("restores every deleted file and the manifest when removal fails in a non-git project", async () => {
     rmSync(join(target, ".git"), { recursive: true, force: true });
     placeRichSkill();
-    const hash = hashDiskTree(join(target, ".claude", "skills", "hatch-usage"));
-    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } }, [
-      "claude",
-      "codex",
-    ]);
+    const hash = hashDiskTree(
+      join(target, ".claude", "skills", "example-skill"),
+    );
+    writeManifest(
+      { "example-skill": { version: "1.0.0", contentHash: hash } },
+      ["claude", "codex"],
+    );
     const manifestBefore = readFileSync(
       join(target, "hatch.manifest.json"),
       "utf8",
@@ -706,7 +711,7 @@ describe("runRemove — rollback on partial failure", () => {
       throw new Error("simulated disk failure");
     });
 
-    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+    const exitCode = await runRemove(["example-skill", "--path", target]);
 
     expect(exitCode).toBe(1);
     expectFullyRestored();
@@ -718,11 +723,13 @@ describe("runRemove — rollback on partial failure", () => {
 
   it("restores every deleted file and the manifest, making no commit, when removal fails in a git project", async () => {
     placeRichSkill();
-    const hash = hashDiskTree(join(target, ".claude", "skills", "hatch-usage"));
-    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } }, [
-      "claude",
-      "codex",
-    ]);
+    const hash = hashDiskTree(
+      join(target, ".claude", "skills", "example-skill"),
+    );
+    writeManifest(
+      { "example-skill": { version: "1.0.0", contentHash: hash } },
+      ["claude", "codex"],
+    );
     await commitAll("seed");
     const manifestBefore = readFileSync(
       join(target, "hatch.manifest.json"),
@@ -740,7 +747,7 @@ describe("runRemove — rollback on partial failure", () => {
         }) as any,
     );
 
-    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+    const exitCode = await runRemove(["example-skill", "--path", target]);
 
     expect(exitCode).toBe(1);
     expectFullyRestored();
@@ -754,7 +761,10 @@ describe("runRemove — rollback on partial failure", () => {
   it("reports the failure and the incomplete rollback, rather than throwing, when recovery itself cannot finish", async () => {
     rmSync(join(target, ".git"), { recursive: true, force: true });
     placeRichSkill();
-    writeManifest({ "hatch-usage": { version: "1.0.0" } }, ["claude", "codex"]);
+    writeManifest({ "example-skill": { version: "1.0.0" } }, [
+      "claude",
+      "codex",
+    ]);
     const manifestBefore = readFileSync(
       join(target, "hatch.manifest.json"),
       "utf8",
@@ -775,13 +785,13 @@ describe("runRemove — rollback on partial failure", () => {
       // biome-ignore lint/suspicious/noExplicitAny: passthrough to the real fs signature
     }) as any);
 
-    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+    const exitCode = await runRemove(["example-skill", "--path", target]);
 
     expect(exitCode).toBe(1);
     expect(
       consoleErrors.some(
         (m) =>
-          m.includes('failed to remove "hatch-usage"') &&
+          m.includes('failed to remove "example-skill"') &&
           m.includes("rollback could not be completed") &&
           m.includes("may now describe different states"),
       ),
@@ -797,7 +807,10 @@ describe("runRemove — rollback on partial failure", () => {
   it("restores a dropped harness's content when --harness fails partway", async () => {
     rmSync(join(target, ".git"), { recursive: true, force: true });
     placeRichSkill();
-    writeManifest({ "hatch-usage": { version: "1.0.0" } }, ["claude", "codex"]);
+    writeManifest({ "example-skill": { version: "1.0.0" } }, [
+      "claude",
+      "codex",
+    ]);
     const manifestBefore = readFileSync(
       join(target, "hatch.manifest.json"),
       "utf8",
@@ -823,10 +836,10 @@ describe("runRemove — version control is optional", () => {
 
   it("removes the content and updates the manifest with no commit attempted", async () => {
     makeNonGit();
-    const hash = placeSkill(".claude", "hatch-usage", {
-      "SKILL.md": "# Hatch Usage",
+    const hash = placeSkill(".claude", "example-skill", {
+      "SKILL.md": "# Example Skill",
     });
-    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } });
+    writeManifest({ "example-skill": { version: "1.0.0", contentHash: hash } });
     const commit = vi.fn();
     vi.mocked(simpleGit).mockImplementationOnce(
       () =>
@@ -838,28 +851,28 @@ describe("runRemove — version control is optional", () => {
         }) as any,
     );
 
-    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+    const exitCode = await runRemove(["example-skill", "--path", target]);
 
     expect(exitCode).toBe(0);
     expect(commit).not.toHaveBeenCalled();
-    expect(existsSync(join(target, ".claude", "skills", "hatch-usage"))).toBe(
+    expect(existsSync(join(target, ".claude", "skills", "example-skill"))).toBe(
       false,
     );
     const manifest = JSON.parse(
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
-    expect(manifest.skills["hatch-usage"]).toBeUndefined();
+    expect(manifest.skills["example-skill"]).toBeUndefined();
   });
 
   it("warns before a --force-all removal proceeds", async () => {
     makeNonGit();
-    placeSkill(".claude", "hatch-usage", { "SKILL.md": "# edited locally" });
+    placeSkill(".claude", "example-skill", { "SKILL.md": "# edited locally" });
     writeManifest({
-      "hatch-usage": { version: "1.0.0", contentHash: "sha256:stale" },
+      "example-skill": { version: "1.0.0", contentHash: "sha256:stale" },
     });
 
     const exitCode = await runRemove([
-      "hatch-usage",
+      "example-skill",
       "--path",
       target,
       "--force-all",
@@ -874,19 +887,19 @@ describe("runRemove — version control is optional", () => {
     // The warning lands before the removal reports itself done — it exists
     // to be read while the operation is still avoidable.
     expect(warningIndex).toBeLessThan(removalIndex);
-    expect(existsSync(join(target, ".claude", "skills", "hatch-usage"))).toBe(
+    expect(existsSync(join(target, ".claude", "skills", "example-skill"))).toBe(
       false,
     );
   });
 
   it("warns on a run that aborts before it would ever commit", async () => {
     makeNonGit();
-    const hash = placeSkill(".claude", "hatch-usage", {
-      "SKILL.md": "# Hatch Usage",
+    const hash = placeSkill(".claude", "example-skill", {
+      "SKILL.md": "# Example Skill",
     });
     writeManifest(
       {
-        "hatch-usage": {
+        "example-skill": {
           version: "1.0.0",
           contentHash: hash,
           group: "my-group",
@@ -896,7 +909,7 @@ describe("runRemove — version control is optional", () => {
     );
 
     // A group member is refused outright, long before any commit.
-    const exitCode = await runRemove(["hatch-usage", "--path", target]);
+    const exitCode = await runRemove(["example-skill", "--path", target]);
 
     expect(exitCode).toBe(1);
     expect(consoleLogs.some((m) => m.includes("not a git repository"))).toBe(
@@ -905,12 +918,12 @@ describe("runRemove — version control is optional", () => {
   });
 
   it("stays silent about version control in a repository root", async () => {
-    const hash = placeSkill(".claude", "hatch-usage", {
-      "SKILL.md": "# Hatch Usage",
+    const hash = placeSkill(".claude", "example-skill", {
+      "SKILL.md": "# Example Skill",
     });
-    writeManifest({ "hatch-usage": { version: "1.0.0", contentHash: hash } });
+    writeManifest({ "example-skill": { version: "1.0.0", contentHash: hash } });
 
-    await runRemove(["hatch-usage", "--path", target]);
+    await runRemove(["example-skill", "--path", target]);
 
     expect(consoleLogs.some((m) => m.includes("not a git repository"))).toBe(
       false,

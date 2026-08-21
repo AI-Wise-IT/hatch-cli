@@ -3,29 +3,29 @@ import { parseImportTarget, pinsEqual, resolvePin } from "./pin-spec.js";
 
 describe("parseImportTarget", () => {
   it("parses a bare name with no spec", () => {
-    expect(parseImportTarget("hatch-usage")).toEqual({
-      name: "hatch-usage",
+    expect(parseImportTarget("example-skill")).toEqual({
+      name: "example-skill",
       spec: { kind: "none" },
     });
   });
 
   it("parses an exact version pin", () => {
-    expect(parseImportTarget("hatch-usage@1.2.3")).toEqual({
-      name: "hatch-usage",
+    expect(parseImportTarget("example-skill@1.2.3")).toEqual({
+      name: "example-skill",
       spec: { kind: "exact", value: "1.2.3" },
     });
   });
 
   it("parses a range/floor pin", () => {
-    expect(parseImportTarget("hatch-usage@^1.2.3")).toEqual({
-      name: "hatch-usage",
+    expect(parseImportTarget("example-skill@^1.2.3")).toEqual({
+      name: "example-skill",
       spec: { kind: "range", value: "1.2.3" },
     });
   });
 
   it("parses the literal 'latest' as an explicit unpin", () => {
-    expect(parseImportTarget("hatch-usage@latest")).toEqual({
-      name: "hatch-usage",
+    expect(parseImportTarget("example-skill@latest")).toEqual({
+      name: "example-skill",
       spec: { kind: "latest" },
     });
   });

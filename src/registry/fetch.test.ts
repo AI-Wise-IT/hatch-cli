@@ -33,22 +33,26 @@ function fileResponse(path: string, content: string) {
 describe("fetchRegistryFolder", () => {
   it("fetches every file in a flat folder, authenticated with the given token", async () => {
     server.use(
-      http.get(`${BASE}/hatch-usage`, ({ request }) => {
+      http.get(`${BASE}/example-skill`, ({ request }) => {
         expect(request.headers.get("authorization")).toBe("Bearer good-token");
         return HttpResponse.json([
-          { name: "SKILL.md", path: "hatch-usage/SKILL.md", type: "file" },
-          { name: "skill.json", path: "hatch-usage/skill.json", type: "file" },
+          { name: "SKILL.md", path: "example-skill/SKILL.md", type: "file" },
+          {
+            name: "skill.json",
+            path: "example-skill/skill.json",
+            type: "file",
+          },
         ]);
       }),
-      http.get(`${BASE}/hatch-usage/SKILL.md`, () =>
-        fileResponse("hatch-usage/SKILL.md", "# hi"),
+      http.get(`${BASE}/example-skill/SKILL.md`, () =>
+        fileResponse("example-skill/SKILL.md", "# hi"),
       ),
-      http.get(`${BASE}/hatch-usage/skill.json`, () =>
-        fileResponse("hatch-usage/skill.json", '{"version":"1.0.0"}'),
+      http.get(`${BASE}/example-skill/skill.json`, () =>
+        fileResponse("example-skill/skill.json", '{"version":"1.0.0"}'),
       ),
     );
 
-    const result = await fetchRegistryFolder("good-token", "hatch-usage");
+    const result = await fetchRegistryFolder("good-token", "example-skill");
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
     expect(result.files.get("SKILL.md")).toBe("# hi");
@@ -89,9 +93,9 @@ describe("fetchRegistryFolder", () => {
   });
 
   it("reports unreachable on a network failure", async () => {
-    server.use(http.get(`${BASE}/hatch-usage`, () => HttpResponse.error()));
+    server.use(http.get(`${BASE}/example-skill`, () => HttpResponse.error()));
 
-    const result = await fetchRegistryFolder("good-token", "hatch-usage");
+    const result = await fetchRegistryFolder("good-token", "example-skill");
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure result");
     expect(result.reason).toBe("unreachable");
@@ -100,12 +104,12 @@ describe("fetchRegistryFolder", () => {
   it("reports unreachable on an unexpected non-200/404 status", async () => {
     server.use(
       http.get(
-        `${BASE}/hatch-usage`,
+        `${BASE}/example-skill`,
         () => new HttpResponse(null, { status: 500 }),
       ),
     );
 
-    const result = await fetchRegistryFolder("good-token", "hatch-usage");
+    const result = await fetchRegistryFolder("good-token", "example-skill");
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure result");
     expect(result.reason).toBe("unreachable");
@@ -113,24 +117,24 @@ describe("fetchRegistryFolder", () => {
 
   it("resolves a pinned ref via ?ref=<name>@<version> (0009-skill-versioning-semver-tags)", async () => {
     server.use(
-      http.get(`${BASE}/hatch-usage`, ({ request }) => {
+      http.get(`${BASE}/example-skill`, ({ request }) => {
         const url = new URL(request.url);
-        expect(url.searchParams.get("ref")).toBe("hatch-usage@1.2.0");
+        expect(url.searchParams.get("ref")).toBe("example-skill@1.2.0");
         return HttpResponse.json([
-          { name: "SKILL.md", path: "hatch-usage/SKILL.md", type: "file" },
+          { name: "SKILL.md", path: "example-skill/SKILL.md", type: "file" },
         ]);
       }),
-      http.get(`${BASE}/hatch-usage/SKILL.md`, ({ request }) => {
+      http.get(`${BASE}/example-skill/SKILL.md`, ({ request }) => {
         const url = new URL(request.url);
-        expect(url.searchParams.get("ref")).toBe("hatch-usage@1.2.0");
-        return fileResponse("hatch-usage/SKILL.md", "# pinned");
+        expect(url.searchParams.get("ref")).toBe("example-skill@1.2.0");
+        return fileResponse("example-skill/SKILL.md", "# pinned");
       }),
     );
 
     const result = await fetchRegistryFolder(
       "good-token",
-      "hatch-usage",
-      "hatch-usage@1.2.0",
+      "example-skill",
+      "example-skill@1.2.0",
     );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
@@ -203,7 +207,11 @@ describe("listRegistryRoot", () => {
         callCount++;
         expect(request.headers.get("authorization")).toBe("Bearer good-token");
         return HttpResponse.json([
-          { name: "prd-elicitation", path: "prd-elicitation", type: "dir" },
+          {
+            name: "example-pointer-skill",
+            path: "example-pointer-skill",
+            type: "dir",
+          },
           { name: "my-group", path: "my-group", type: "dir" },
           { name: "README.md", path: "README.md", type: "file" },
         ]);
@@ -215,7 +223,7 @@ describe("listRegistryRoot", () => {
     expect(result).toEqual({
       ok: true,
       entries: [
-        { name: "prd-elicitation", type: "dir" },
+        { name: "example-pointer-skill", type: "dir" },
         { name: "my-group", type: "dir" },
         { name: "README.md", type: "file" },
       ],
@@ -275,15 +283,22 @@ describe("registryFolderExists", () => {
   it("reports true with a single, non-recursive call when the folder exists", async () => {
     let callCount = 0;
     server.use(
-      http.get(`${BASE}/hatch-usage-cld`, () => {
+      http.get(`${BASE}/example-skill-cld`, () => {
         callCount++;
         return HttpResponse.json([
-          { name: "SKILL.md", path: "hatch-usage-cld/SKILL.md", type: "file" },
+          {
+            name: "SKILL.md",
+            path: "example-skill-cld/SKILL.md",
+            type: "file",
+          },
         ]);
       }),
     );
 
-    const result = await registryFolderExists("good-token", "hatch-usage-cld");
+    const result = await registryFolderExists(
+      "good-token",
+      "example-skill-cld",
+    );
     expect(result).toEqual({ ok: true, exists: true });
     expect(callCount).toBe(1);
   });
@@ -291,19 +306,27 @@ describe("registryFolderExists", () => {
   it("reports false when the folder doesn't exist", async () => {
     server.use(
       http.get(
-        `${BASE}/hatch-usage-cld`,
+        `${BASE}/example-skill-cld`,
         () => new HttpResponse(null, { status: 404 }),
       ),
     );
 
-    const result = await registryFolderExists("good-token", "hatch-usage-cld");
+    const result = await registryFolderExists(
+      "good-token",
+      "example-skill-cld",
+    );
     expect(result).toEqual({ ok: true, exists: false });
   });
 
   it("reports unreachable on a network failure", async () => {
-    server.use(http.get(`${BASE}/hatch-usage-cld`, () => HttpResponse.error()));
+    server.use(
+      http.get(`${BASE}/example-skill-cld`, () => HttpResponse.error()),
+    );
 
-    const result = await registryFolderExists("good-token", "hatch-usage-cld");
+    const result = await registryFolderExists(
+      "good-token",
+      "example-skill-cld",
+    );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure result");
     expect(result.reason).toBe("unreachable");
@@ -312,12 +335,15 @@ describe("registryFolderExists", () => {
   it("reports unreachable on an unexpected non-200/404 status", async () => {
     server.use(
       http.get(
-        `${BASE}/hatch-usage-cld`,
+        `${BASE}/example-skill-cld`,
         () => new HttpResponse(null, { status: 500 }),
       ),
     );
 
-    const result = await registryFolderExists("good-token", "hatch-usage-cld");
+    const result = await registryFolderExists(
+      "good-token",
+      "example-skill-cld",
+    );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure result");
     expect(result.reason).toBe("unreachable");

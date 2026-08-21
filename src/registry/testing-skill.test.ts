@@ -12,9 +12,9 @@ describe("isTestingSkillName", () => {
   });
 
   it("never classifies a name without a leading underscore as testing", () => {
-    expect(isTestingSkillName("prd-elicitation")).toBe(false);
-    expect(isTestingSkillName("hatch-usage")).toBe(false);
-    expect(isTestingSkillName("architecture-decisions")).toBe(false);
+    expect(isTestingSkillName("example-pointer-skill")).toBe(false);
+    expect(isTestingSkillName("example-skill")).toBe(false);
+    expect(isTestingSkillName("example-group")).toBe(false);
     // Underscores anywhere but the front carry no meaning.
     expect(isTestingSkillName("some_fixture")).toBe(false);
     expect(isTestingSkillName("fixture_")).toBe(false);

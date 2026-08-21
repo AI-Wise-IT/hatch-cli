@@ -20,12 +20,12 @@ describe("migrateManifest", () => {
     const v1 = {
       schemaVersion: 1,
       harnesses: ["claude"],
-      skills: { "hatch-usage": { version: "1.0.0" } },
+      skills: { "example-skill": { version: "1.0.0" } },
     };
     expect(migrateManifest(v1)).toEqual({
       schemaVersion: CURRENT_SCHEMA_VERSION,
       harnesses: ["claude"],
-      skills: { "hatch-usage": { version: "1.0.0" } },
+      skills: { "example-skill": { version: "1.0.0" } },
     });
   });
 
@@ -33,12 +33,12 @@ describe("migrateManifest", () => {
     const v2 = {
       schemaVersion: 2,
       harnesses: ["claude"],
-      skills: { "hatch-usage": { version: "1.0.0" } },
+      skills: { "example-skill": { version: "1.0.0" } },
     };
     expect(migrateManifest(v2)).toEqual({
       schemaVersion: CURRENT_SCHEMA_VERSION,
       harnesses: ["claude"],
-      skills: { "hatch-usage": { version: "1.0.0" } },
+      skills: { "example-skill": { version: "1.0.0" } },
     });
   });
 
@@ -47,15 +47,15 @@ describe("migrateManifest", () => {
       schemaVersion: 3,
       harnesses: ["claude", "codex"],
       skills: {
-        "hatch-usage": { version: "1.2.0", contentHash: "sha256-abc" },
-        "prd-elicitation": {
+        "example-skill": { version: "1.2.0", contentHash: "sha256-abc" },
+        "example-pointer-skill": {
           version: "1.0.0",
           pin: { type: "exact", value: "1.0.0" },
           contentHash: "sha256-def",
         },
-        "design-architecture-decision": {
+        "example-member": {
           version: "1.1.0",
-          group: "architecture-decisions",
+          group: "example-group",
         },
       },
     };
