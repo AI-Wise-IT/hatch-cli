@@ -43,13 +43,19 @@ The context values follow the inventory above: the CLI repo, a registry checkout
 
 *Alternative — put the context in the fence info string* (```` ```bash runs-in=hatch-cli ````). Rejected: it renders as noise in every markdown viewer, and the records are read by humans far more often than by the runner.
 
-### The cross-repo mechanism is 0014's, reused verbatim
+### The cross-repo mechanism follows 0014's shape, but not its npm step
 
-The registry repo's job obtains the records the same way [0014](../../../docs/architecture/decisions/0014-registry-collision-detection.md)'s registry-side check obtains the CLI: by installing the published `@ai-wise/hatchcli`, always latest, never pinned. The CLI repo's job obtains the registry the same way 0014's CLI-side check does: a checkout using the existing read-scoped `HATCH_SKILLS_READ_TOKEN`.
+The CLI repo's job obtains the registry exactly as [0014](../../../docs/architecture/decisions/0014-registry-collision-detection.md)'s CLI-side check does: a checkout using the existing read-scoped `HATCH_SKILLS_READ_TOKEN`.
 
-Rationale: that record already solved this exact problem, reasoned through the staleness trap of pinning, and provisioned the credential. Inventing a second cross-repo path would mean two mechanisms to keep in agreement for one job.
+The registry repo's job cannot mirror 0014's other half. That check installs the published `@ai-wise/hatchcli` and needs only the CLI's *logic*, which ships in `dist/`. This runner needs the CLI's logic **and the records themselves**, and the package publishes neither: `package.json` declares `files: ["dist"]`, and a `npm pack --dry-run` contains zero files under `docs/architecture/decisions/`. Installing from npm would leave the runner with nothing to parse.
 
-*Alternative — the registry repo checks out the CLI repo's source.* Rejected: it makes the registry's CI depend on the CLI's unreleased working state, so a broken commit on the CLI's `main` would block unrelated registry PRs.
+So the registry job checks out the CLI repo at its **latest release tag**, resolved at run time rather than written into the workflow. That supplies both inputs, and keeps the property 0014 was protecting — never pinned to a version that silently goes stale — while avoiding a dependency on unreleased work. Because the CLI repo is public ([0004](../../../docs/architecture/decisions/0004-github-vcs-platform.md)), this checkout needs no credential, so the registry repo's CI keeps the no-external-credentials property [0007](../../../docs/architecture/decisions/0007-github-actions-deployment.md) established for it.
+
+*Alternative — add the records to the package's `files` array.* Rejected: it ships governance documents to every consumer of the CLI, who has no use for them, purely to satisfy a CI job.
+
+*Alternative — the registry repo checks out the CLI repo's default branch.* Rejected: it makes the registry's CI depend on the CLI's unreleased working state, so a broken commit on the CLI's `main` would block unrelated registry PRs. The release tag avoids this while still tracking forward.
+
+*Alternative — run every check from the CLI repo only, checking out the registry.* Rejected: registry pull requests would then get no decision-record gate at the moment content is authored, which is the point at which a violation is cheapest to fix.
 
 ### Checks needing live GitHub configuration are declared, not run
 

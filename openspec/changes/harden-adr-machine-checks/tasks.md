@@ -25,8 +25,9 @@
 ## 5. Wire CI
 
 - [ ] 5.1 Add the CLI repo's job: runs the conformance check, the immutability check, and every check whose context is the CLI repo or both, checking out the registry with the existing read-scoped `HATCH_SKILLS_READ_TOKEN`. Verify the job passes on a branch with no record changes.
-- [ ] 5.2 Add the registry repo's job: installs the published `@ai-wise/hatchcli` at latest, never pinned, and runs every check whose context is a registry checkout or both. Verify the job passes against the registry's current `main`.
-- [ ] 5.3 Confirm no credential was widened for either job. Verify the registry token's scope is still Contents-read only and that no Administration-scoped token was introduced.
+- [ ] 5.2 Add the registry repo's job: checks out the CLI repo at its latest release tag, resolved at run time, and runs every check whose context is a registry checkout or both. Verify the job passes against the registry's current `main`, and that it obtains both the runner and the records — installing the published package would supply neither, since `files: ["dist"]` excludes them.
+- [ ] 5.3 Confirm no credential was widened or added. Verify the registry token's scope is still Contents-read only, that no Administration-scoped token was introduced, and that the registry job needs no credential at all to read the public CLI repo.
+- [ ] 5.4 Update the Invariants of every record whose enforcement this runner now provides — several read "Enforcement mechanism: none" for rules it checks — naming the job and its mode. This must land here, while the jobs exist and are named but before 6.1 makes the immutability check blocking, because Invariants is a frozen section and this edit would otherwise require superseding each affected record. Verify each updated Invariant names its job, and that the immutability check is not yet a required status check.
 
 ## 6. Make it blocking
 
@@ -36,5 +37,4 @@
 ## 7. Close the loop
 
 - [ ] 7.1 Update the `capture-adrs` skill to write the status field and the context declaration, and to route a changed decision to a superseding record rather than an edit. Verify by capturing a new record and confirming it conforms without hand-editing.
-- [ ] 7.2 Record this enforcement mechanism in the affected records' Invariants — several currently read "Enforcement mechanism: none" for rules this runner now checks. Verify each updated Invariant names the job and its mode. Note this edits a frozen section, so it must be done before those records' statuses are enforced, or carried by a superseding record.
-- [ ] 7.3 Narrow `openspec/changes/adopt-greptile-invariant-review/proposal.md`: its open question about whether a Machine Check is the better hook is answered, and its remaining scope is the judgment-type and live-configuration residue. Verify the proposal no longer poses a question this change settled.
+- [ ] 7.2 Narrow `openspec/changes/adopt-greptile-invariant-review/proposal.md`: its open question about whether a Machine Check is the better hook is answered, and its remaining scope is the judgment-type and live-configuration residue. Verify the proposal no longer poses a question this change settled.
