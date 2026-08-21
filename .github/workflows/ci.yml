@@ -100,4 +100,5 @@ jobs:
             --head "${{ github.event.pull_request.head.sha }}"
       - name: Push to main — immutability has no pull request to compare
         if: github.event_name != 'pull_request'
-        run: echo "Skipping the immutability check: it compares a pull request against its merge base."
+        run: |
+          echo "Skipping the immutability check: it compares a pull request against its merge base."
