@@ -29,3 +29,4 @@
 | 0025 | `0025-harness-shadowing-risk-accepted` | registry-collision-detection | accepted | [`0025-harness-shadowing-risk-accepted.md`](0025-harness-shadowing-risk-accepted.md) |
 | 0026 | `0026-git-optional-dependency` | version-control-integration | accepted | [`0026-git-optional-dependency.md`](0026-git-optional-dependency.md) |
 | 0027 | `0027-testing-skill-convention` | skill-registry-group-structure | accepted | [`0027-testing-skill-convention.md`](0027-testing-skill-convention.md) |
+| 0028 | `0028-registry-discovery-live-walk` | registry-discovery | accepted | [`0028-registry-discovery-live-walk.md`](0028-registry-discovery-live-walk.md) |

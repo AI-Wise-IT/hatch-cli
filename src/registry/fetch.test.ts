@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   fetchRegistryFile,
   fetchRegistryFolder,
+  listRegistryRoot,
   registryFolderExists,
 } from "./fetch.js";
 
@@ -189,6 +190,84 @@ describe("fetchRegistryFile", () => {
       "foo@2.0.0",
     );
     expect(result).toEqual({ ok: true, content: '{"version":"2.0.0"}' });
+  });
+});
+
+describe("listRegistryRoot", () => {
+  const ROOT = `${BASE}/`;
+
+  it("returns every top-level entry's name and type from one non-recursive call, authenticated with the given token", async () => {
+    let callCount = 0;
+    server.use(
+      http.get(ROOT, ({ request }) => {
+        callCount++;
+        expect(request.headers.get("authorization")).toBe("Bearer good-token");
+        return HttpResponse.json([
+          { name: "prd-elicitation", path: "prd-elicitation", type: "dir" },
+          { name: "my-group", path: "my-group", type: "dir" },
+          { name: "README.md", path: "README.md", type: "file" },
+        ]);
+      }),
+    );
+
+    const result = await listRegistryRoot("good-token");
+
+    expect(result).toEqual({
+      ok: true,
+      entries: [
+        { name: "prd-elicitation", type: "dir" },
+        { name: "my-group", type: "dir" },
+        { name: "README.md", type: "file" },
+      ],
+    });
+    expect(callCount).toBe(1);
+  });
+
+  it("returns an empty entry list for an empty root rather than a failure", async () => {
+    server.use(http.get(ROOT, () => HttpResponse.json([])));
+
+    const result = await listRegistryRoot("good-token");
+
+    expect(result).toEqual({ ok: true, entries: [] });
+  });
+
+  it("reports unreachable on a network failure", async () => {
+    server.use(http.get(ROOT, () => HttpResponse.error()));
+
+    const result = await listRegistryRoot("good-token");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure result");
+    expect(result.reason).toBe("unreachable");
+    expect(result.detail).toContain("could not reach the registry");
+  });
+
+  it("reports unreachable on an unexpected non-200/404 status", async () => {
+    server.use(http.get(ROOT, () => new HttpResponse(null, { status: 500 })));
+
+    const result = await listRegistryRoot("good-token");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure result");
+    expect(result.reason).toBe("unreachable");
+    expect(result.detail).toContain("500");
+  });
+
+  it("surfaces a root 404 as its own no-registry-access reason, never the shared not-found a named folder's 404 carries", async () => {
+    server.use(http.get(ROOT, () => new HttpResponse(null, { status: 404 })));
+
+    const result = await listRegistryRoot("good-token");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure result");
+    expect(result.reason).toBe("no-registry-access");
+    expect(result.reason).not.toBe("not-found");
+    // The root exists for anyone who can see the repository, so the only
+    // reading is a credential without access — never a missing name.
+    expect(result.detail).toBe(
+      "the registry root could not be read with these credentials",
+    );
+    expect(result.detail).not.toContain("not found");
   });
 });
 

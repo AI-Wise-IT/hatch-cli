@@ -3,12 +3,12 @@
 See [proposal.md](proposal.md) — Why. The constraints that shape the approach:
 
 - **`src/registry/fetch.ts` has three shapes, none of which lists the registry root.** `registryFolderExists` is a single non-recursive call used as a boolean, `fetchRegistryFile` pulls one file's content, and `fetchRegistryFolder` walks a subtree. A directory call already returns an array of `{name, path, type}` entries — the root listing is that same call with the path `""`, exposed as a real result instead of discarded.
-- **The Contents API returns directory entries without file contents.** A directory response carries names and types; a file's base64 content only comes from a call naming that file. So per-entry metadata costs one call each, and there is no batched form of it under the API [ADR-0003](../../../docs/architecture/decisions/0003-registry-github-tarball-fetch.md) settled on.
+- **The Contents API returns directory entries without file contents.** A directory response carries names and types; a file's base64 content only comes from a call naming that file. So per-entry metadata costs one call each, and there is no batched form of it under the API ADR-0003 (`docs/architecture/decisions/0003-registry-github-tarball-fetch.md`) settled on.
 - **A folder's `skill.json` already answers three of the four things a listing needs.** `version`, `members` (present means group) and `removed` are parsed today by `parseGroupSkillJson`, on a fetch `hatch import` already makes to classify a target. Only the description is new — and only for plain skills, whose descriptions live in a different file.
-- **A `404` means two different things at two different paths.** On a named folder it is genuinely ambiguous between "no such name" and "this credential cannot see the registry", which is the ambiguity [backlog-0003](../../../intake/backlog-0003-registry-search-list.md) flagged. On the repository root it is not ambiguous at all: the root exists for anyone who can see the repository.
-- **Harness variants cannot be told from ordinary names in isolation.** [ADR-0025](../../../docs/architecture/decisions/0025-harness-shadowing-risk-accepted.md) established this concretely — `_harness-suffix-fixture-cld` beside `_harness-suffix-fixture` is a legitimate variant pair, and a lone `<x>-<code>` is structurally identical to an ordinary skill ending in a reserved code. Any single-snapshot rule has to be sound under that.
+- **A `404` means two different things at two different paths.** On a named folder it is genuinely ambiguous between "no such name" and "this credential cannot see the registry" — a private repository answers both with the same status. On the repository root it is not ambiguous at all: the root exists for anyone who can see the repository.
+- **Harness variants cannot be told from ordinary names in isolation.** ADR-0025 (`docs/architecture/decisions/0025-harness-shadowing-risk-accepted.md`) established this concretely — `_harness-suffix-fixture-cld` beside `_harness-suffix-fixture` is a legitimate variant pair, and a lone `<x>-<code>` is structurally identical to an ordinary skill ending in a reserved code. Any single-snapshot rule has to be sound under that.
 - **The registry holds fifteen top-level folders today** — twelve `_`-prefixed fixtures and three real entries. A listing that fetches metadata per entry costs roughly thirty calls at today's size.
-- **Scriptable output is a standing No.** `intake/mvp-scope.md` records it as permanent for `hatch import`; nothing about a listing reopens it.
+- **Scriptable output is a standing No.** The PRD (`intake/product-requirements.md`) records it as permanent for `hatch import`; nothing about a listing reopens it.
 
 ## Goals / Non-Goals
 
@@ -22,7 +22,7 @@ See [proposal.md](proposal.md) — Why. The constraints that shape the approach:
 **Non-Goals:**
 
 - Making `hatch list` fast at a registry size the registry does not have. The live walk is chosen knowing its cost grows linearly; the index is the recorded answer if that ever bites.
-- Caching anything between runs. Local caching of fetched registry content is a permanent No in `intake/mvp-scope.md`, and this command does not carve an exception.
+- Caching anything between runs. Local caching of fetched registry content is a permanent No on the PRD's No list (`intake/product-requirements.md`), and this command does not carve an exception.
 - Making the testing-content exclusion a security boundary. It hides content from a listing the same way the import gate stops an accident, not a determined reader.
 
 ## Decisions
@@ -31,7 +31,7 @@ See [proposal.md](proposal.md) — Why. The constraints that shape the approach:
 
 The root listing is one call. Each surviving entry is one `skill.json` call, plus one `SKILL.md` call when the entry turns out to be a plain skill. At fifteen folders that is under thirty requests; the entries are independent, so they run through a bounded concurrency pool rather than serially.
 
-The alternative — a CI-generated `index.json` at the registry root, fetched in one call — is the faster mechanism and the wrong one to build now. It is a second artifact that must always agree with the tree it describes, which is precisely why [ADR-0009](../../../docs/architecture/decisions/0009-skill-versioning-semver-tags.md) rejected a version-to-commit index and [ADR-0019](../../../docs/architecture/decisions/0019-registry-removed-metadata-flag.md) rejected a removed-names index. Building it also means a CI job and a generator in `hatch-skills` before `hatch list` can do anything at all in `hatch-cli`, for a latency problem that does not exist at this registry's size.
+The alternative — a CI-generated `index.json` at the registry root, fetched in one call — is the faster mechanism and the wrong one to build now. It is a second artifact that must always agree with the tree it describes, which is precisely why ADR-0009 (`docs/architecture/decisions/0009-skill-versioning-semver-tags.md`) rejected a version-to-commit index and ADR-0019 (`docs/architecture/decisions/0019-registry-removed-metadata-flag.md`) rejected a removed-names index. Building it also means a CI job and a generator in `hatch-skills` before `hatch list` can do anything at all in `hatch-cli`, for a latency problem that does not exist at this registry's size.
 
 What makes deferring safe is that the index is a drop-in substitute: it would replace the retrieval step behind the same command, the same output and the same spec. Nothing in the requirements names the mechanism, so adopting an index later changes no observable behavior beyond speed.
 
@@ -41,7 +41,7 @@ What makes deferring safe is that the index is a drop-in substitute: it would re
 
 Names come from the root listing, so filtering by name is free — it happens on the one call every run makes, before any per-entry metadata is fetched. A filtered `hatch list prd` costs two or three calls where a bare `hatch list` costs thirty.
 
-That ordering also decides where each exclusion sits. The testing-content exclusion keys off the `_` prefix, which is a name, so it filters for free alongside the user's term — the same reason [ADR-0027](../../../docs/architecture/decisions/0027-testing-skill-convention.md) put the name check before the fetch in `hatch import`. The removed exclusion needs `skill.json`, so it necessarily applies after that fetch, dropping the entry from the rendered output rather than from the fetch set.
+That ordering also decides where each exclusion sits. The testing-content exclusion keys off the `_` prefix, which is a name, so it filters for free alongside the user's term — the same reason ADR-0027 (`docs/architecture/decisions/0027-testing-skill-convention.md`) put the name check before the fetch in `hatch import`. The removed exclusion needs `skill.json`, so it necessarily applies after that fetch, dropping the entry from the rendered output rather than from the fetch set.
 
 The declaration half of the testing marker — `"testing": true` on a folder without the prefix — is checked on the same `skill.json`, exactly as import checks it, so a folder that reached the registry unprefixed is still excluded.
 
@@ -51,7 +51,7 @@ The declaration half of the testing marker — `"testing": true` on a folder wit
 
 Everything else is printed literally, and that is not a fallback — it is correct. `hatch import claude-code-guide` resolves: the suffixed candidate `claude-code-guide-<code>` does not exist, so resolution falls through to the folder's own literal name. Printing it is truthful about what you can type.
 
-The cost is a genuinely harness-exclusive family — `handover-cur` with no `handover` — appearing under its suffixed name. That is [ADR-0025](../../../docs/architecture/decisions/0025-harness-shadowing-risk-accepted.md)'s accepted ambiguity showing up on a new surface rather than a new problem, and the alternative is worse: inferring a family from a lone suffixed folder would print `handover`, a name that resolves to nothing.
+The cost is a genuinely harness-exclusive family — `handover-cur` with no `handover` — appearing under its suffixed name. That is ADR-0025 (`docs/architecture/decisions/0025-harness-shadowing-risk-accepted.md`)'s accepted ambiguity showing up on a new surface rather than a new problem, and the alternative is worse: inferring a family from a lone suffixed folder would print `handover`, a name that resolves to nothing.
 
 *Alternative considered.* Listing every top-level folder literally, variants included, and folding nothing. Simpler, and rejected because it prints `handover-cld` next to `handover` as if they were two importable things, which is a wrong-name failure of the same kind this command exists to remove.
 
@@ -59,7 +59,7 @@ The cost is a genuinely harness-exclusive family — `handover-cur` with no `han
 
 A skill's description already exists, in the `SKILL.md` frontmatter every harness reads. Copying it into `skill.json` would create two authored copies of one sentence with no check that they agree — and the frontmatter is the one that governs how the skill actually behaves once placed, so a drifting `skill.json` copy would misdescribe it in exactly the listing meant to help.
 
-A group has no `SKILL.md`; its folder holds member folders and its own manifest. So a group needs a field of its own, and `skill.json` is where a group's own metadata already lives — `version`, `members`, `removed`, `testing`. `description` joins them as one more additive optional field, the same shape [ADR-0016](../../../docs/architecture/decisions/0016-group-member-manifest-format.md) and [ADR-0019](../../../docs/architecture/decisions/0019-registry-removed-metadata-flag.md) each chose over a separate file.
+A group has no `SKILL.md`; its folder holds member folders and its own manifest. So a group needs a field of its own, and `skill.json` is where a group's own metadata already lives — `version`, `members`, `removed`, `testing`. `description` joins them as one more additive optional field, the same shape ADR-0016 (`docs/architecture/decisions/0016-group-member-manifest-format.md`) and ADR-0019 (`docs/architecture/decisions/0019-registry-removed-metadata-flag.md`) each chose over a separate file.
 
 The asymmetry is deliberate and stateable: **a description is read from wherever that kind of content already keeps its own prose.** The alternative — deriving a group's description by joining its members' — was rejected outright: it produces a paragraph per row, and it describes the parts rather than the whole, which is the opposite of what a browsing reader needs.
 
@@ -79,9 +79,9 @@ A real YAML parser would be more correct in general and is not worth a dependenc
 
 ### A root `404` is a credential failure, and only there
 
-`hatch import`'s not-found wording stays exactly as it is — its `404` really is ambiguous, and [ADR-0027](../../../docs/architecture/decisions/0027-testing-skill-convention.md) depends on that wording being identical across a genuine miss and a refusal.
+`hatch import`'s not-found wording stays exactly as it is — its `404` really is ambiguous, and ADR-0027 (`docs/architecture/decisions/0027-testing-skill-convention.md`) depends on that wording being identical across a genuine miss and a refusal.
 
-The root listing is a different call. Its path is the repository itself, which exists for anyone who can see the repository, so a `404` there has one reading and `hatch list` says so. This resolves the ambiguity `backlog-0003` raised for this surface without touching import's, and it leaks nothing: a caller who cannot see the registry learns only that their own credential is the problem.
+The root listing is a different call. Its path is the repository itself, which exists for anyone who can see the repository, so a `404` there has one reading and `hatch list` says so. This resolves the private-registry `404` ambiguity for this surface without touching import's, and it leaks nothing: a caller who cannot see the registry learns only that their own credential is the problem.
 
 ## Risks / Trade-offs
 

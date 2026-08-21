@@ -11,6 +11,7 @@
 
 - The target is an existing project directory (may or may not have been created by Hatch).
 - The registry is the sole source of skill/group content, and the whole registry is private — every import requires an authenticated session (see UC-2).
+- The caller knows the target's name. [UC-6](discover-registry-content.md) is where that name comes from: `hatch list` prints every importable name, and every name it prints is one this use case accepts.
 
 ## Main Success Scenario
 

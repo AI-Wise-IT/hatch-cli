@@ -30,9 +30,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
-import { resolveToken, writeCredentials } from "../auth/credentials.js";
-import { validateGitHubToken } from "../auth/github-token.js";
-import { promptHidden, promptLine } from "../cli/prompt.js";
+import { authenticate } from "../auth/authenticate.js";
+import { promptLine } from "../cli/prompt.js";
 import {
   getHarnessDefinition,
   isKnownHarness,
@@ -247,12 +246,6 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   };
 }
 
-function isNetworkFailure(reason: string | undefined): boolean {
-  return (
-    typeof reason === "string" && reason.startsWith("could not reach GitHub")
-  );
-}
-
 function extractSkillVersionFromRaw(raw: string): string {
   try {
     const parsed = JSON.parse(raw) as { version?: unknown };
@@ -353,36 +346,6 @@ async function checkRemovedFlags(
     }
   }
   return warnings;
-}
-
-// UC-3 step 3, factored out for reuse by --add-harness (AF-5): resolve an
-// already-persisted session, or prompt and validate a new one. Returns
-// either the resolved token or a reportable error string (unprefixed —
-// callers prepend their own "hatch import: ... — nothing was changed.").
-async function authenticate(): Promise<{ token: string } | { error: string }> {
-  const existing = resolveToken();
-  if (existing) {
-    return { token: existing };
-  }
-
-  const candidate = (
-    await promptHidden("Registry personal access token: ")
-  ).trim();
-  if (!candidate) {
-    return { error: "no token provided" };
-  }
-
-  const validation = await validateGitHubToken(candidate);
-  if (!validation.valid) {
-    return {
-      error: isNetworkFailure(validation.reason)
-        ? `registry unreachable (${validation.reason})`
-        : `invalid password (${validation.reason})`,
-    };
-  }
-
-  writeCredentials(candidate);
-  return { token: candidate };
 }
 
 export async function runImport(argv: string[]): Promise<number> {

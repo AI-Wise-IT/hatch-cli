@@ -37,6 +37,16 @@ export function knownHarnessNames(): string[] {
   return Object.keys(loadRegistry().harnesses);
 }
 
+// Every reserved harness suffix code, for the tooling that reasons about
+// folder *names* rather than about a named harness — `hatch list`'s
+// `<base>-<code>` folding (UC-6) is the case this exists for. Read from
+// here rather than restated, per this file's own single-source rule.
+export function reservedHarnessCodes(): string[] {
+  return Object.values(loadRegistry().harnesses).map(
+    (definition) => definition.code,
+  );
+}
+
 export function isKnownHarness(name: string): boolean {
   return name in loadRegistry().harnesses;
 }
