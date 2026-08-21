@@ -54,11 +54,13 @@ UC-3 and UC-4's business rule that every `hatch import`/`hatch remove` operation
 
 ## Machine Check
 
+Run from the `hatch-cli` checkout. This asserts the invariant above directly — every historically-shipped migration key is still registered — reading the source rather than a built artifact or a project's manifest, so it runs in any checkout without a build step.
+
 ```bash
-grep -q '"schemaVersion"' hatch.manifest.json
+node -e "const s=require('fs').readFileSync('src/manifest-migrations/index.ts','utf8');const cur=+/CURRENT_SCHEMA_VERSION\s*=\s*(\d+)/.exec(s)[1];const keys=new Set(s.split(/\r?\n/).map(l=>l.trim()).filter(l=>/^\d+:/.test(l)).map(l=>parseInt(l)));const gaps=[];for(let v=1;v<cur;v++)if(!keys.has(v))gaps.push(v);console.log(gaps.length?'missing migration from: '+gaps.join(','):'chain intact to v'+cur);process.exit(gaps.length?1:0)"
 ```
 
-Expected result: any `hatch.manifest.json` produced or read by the CLI contains a `schemaVersion` field.
+Expected result: `chain intact to v<N>`, exit 0 — a migration is registered from every schema version between 1 and the current one. Any version printed as missing is one a real project could be sitting on with no way forward, which is exactly the stranding this record exists to prevent.
 
 ## Precedence
 

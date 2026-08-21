@@ -56,11 +56,14 @@ Surfaced directly to the developer rather than guessed, mirroring the precedent 
 
 ## Machine Check
 
+Run against a sibling `hatch-skills` checkout. The two named folders are real registry content: `_group-fixture-combo` is a group, `prd-elicitation` is a plain skill.
+
 ```bash
-grep -n '"members"' <group-folder>/skill.json
+grep -q '"members"' ../hatch-skills/_group-fixture-combo/skill.json && echo "group carries members: correct"
+grep -q '"members"' ../hatch-skills/prd-elicitation/skill.json && echo "VIOLATION: plain skill carries members" || echo "plain skill carries no members: correct"
 ```
 
-Expected result: any registry folder that is a group (as opposed to a plain skill) has a `members` array in its `skill.json`, each entry carrying a `kind` of `"nested"` or `"pointer"` and a `name`. A plain skill's `skill.json` has no `members` field at all.
+Expected result: both confirmation lines. A group's `skill.json` carries a `members` array whose entries each have a `kind` of `"nested"` or `"pointer"` and a `name`; a plain skill's carries no `members` field at all, which is exactly how `hatch import` tells the two apart.
 
 ## Precedence
 

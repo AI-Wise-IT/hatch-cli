@@ -54,11 +54,14 @@ Surfaced directly to the developer rather than guessed, mirroring the standing p
 
 ## Machine Check
 
+Run against a sibling `hatch-skills` checkout. The two named folders are real registry content: `_removed-fixture` is the flagged fixture, `prd-elicitation` is ordinary content.
+
 ```bash
-grep -n '"removed"' <flagged-folder>/skill.json
+grep -q '"removed": true' ../hatch-skills/_removed-fixture/skill.json && echo "flagged fixture carries removed: correct"
+grep -q '"removed"' ../hatch-skills/prd-elicitation/skill.json && echo "VIOLATION: ordinary content carries removed" || echo "ordinary content carries no removed field: correct"
 ```
 
-Expected result: a registry folder intentionally flagged removed shows `"removed": true` in its own `skill.json`; an ordinary folder's `skill.json` has no `removed` field at all (or `false`).
+Expected result: both confirmation lines — a folder intentionally flagged removed shows `"removed": true` in its own `skill.json`, and ordinary content carries no `removed` field at all, since absence is what this record defines as active.
 
 ## Precedence
 

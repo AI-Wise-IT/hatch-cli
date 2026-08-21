@@ -58,12 +58,13 @@ No new invariant beyond what [0010-manifest-schema-migrations](0010-manifest-sch
 
 ## Machine Check
 
+Run from the `hatch-cli` checkout. This record's durable, checkable fact is the registered migration, not a manifest's current version number — the chain has moved past 2, so no live manifest sits there.
+
 ```bash
-grep -n '"schemaVersion": 2' hatch.manifest.json
-grep -n '"group"' hatch.manifest.json
+grep -qE "^[[:space:]]+1: \(manifest\) => manifest,$" src/manifest-migrations/index.ts && echo "v1->v2 registered as an identity transform"
 ```
 
-Expected result: any `hatch.manifest.json` written after this record's implementation carries `schemaVersion: 2`; a project with at least one group import shows a `group` field on that group's member entries and a top-level `skills` entry keyed by the group's own name.
+Expected result: the confirmation line — a migration keyed `1` is registered, and it is the identity, which is what "MUST NOT backfill or guess a `group` value" means mechanically. A missing key would strand any project still on schema v1; a key whose body is not the identity would be backfilling data this record forbids inventing.
 
 ## Precedence
 

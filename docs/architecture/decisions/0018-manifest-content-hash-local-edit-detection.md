@@ -61,11 +61,14 @@ Surfaced directly to the developer rather than guessed, mirroring the standing p
 
 ## Machine Check
 
+Run from the `hatch-cli` checkout. The checkable fact is the registered migration and the hash's own construction — not a manifest's contents, since no `hatch.manifest.json` lives in either repo.
+
 ```bash
-grep -n '"contentHash"' hatch.manifest.json
+grep -qE "^[[:space:]]+2: \(manifest\) => manifest,$" src/manifest-migrations/index.ts && echo "v2->v3 registered as an identity transform"
+grep -ran "createHash(\"sha256\")" src/ --include=*.ts | grep -v "\.test\.ts"
 ```
 
-Expected result: any `hatch.manifest.json` written by a post-Batch-7 `hatch import` shows a `contentHash` field on each standalone/group-member skill entry in `skills`, absent on any group's own top-level entry.
+Expected result: the confirmation line, plus at least one non-test module computing a SHA-256 hash. The identity transform is what "`contentHash` is left absent on migration" means mechanically — a pre-existing v2 entry has no way to know what Hatch originally placed, so inventing a value here would fabricate a baseline and make the next re-import lie about local edits.
 
 ## Precedence
 

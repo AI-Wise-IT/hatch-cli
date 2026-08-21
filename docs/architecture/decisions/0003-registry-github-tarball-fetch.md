@@ -50,11 +50,13 @@ Current practice for "pull one named subdirectory from a private repo into anoth
 
 ## Machine Check
 
+Run from the `hatch-cli` checkout.
+
 ```bash
-grep -rE "git clone.*(skill-content|registry)" src/ || true
+! grep -raE "git clone.*(skill-content|registry|hatch-skills)" src/ --include=*.ts && echo "no git clone of the registry: correct"
 ```
 
-Expected result: no matches — the registry-fetch code path never invokes `git clone` against the registry repo. A match indicates a violation of this record.
+Expected result: the confirmation line, exit 0 — the registry-fetch code path never invokes `git clone` against the registry repo. Any match printed instead is a violation of this record. The check is written so a match fails the command rather than being swallowed, so it cannot pass by finding nothing for the wrong reason.
 
 ## Precedence
 

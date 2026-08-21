@@ -1,8 +1,8 @@
 // Canonical harness registry (ADR-0001). The single source of truth mapping
 // each reserved harness code to the harness it identifies and where that
 // harness expects skill content placed. `hatch import`'s resolution logic,
-// the registry's publish lint, and any registry-browsing tooling all read
-// this file rather than hardcoding their own copy of the reserved set.
+// the collision check, and any registry-browsing tooling all read this file
+// rather than hardcoding their own copy of the reserved set.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

@@ -60,16 +60,20 @@ The same review also raised whether a *group* with a removed *member* should blo
 ## Machine Check
 
 ```bash
-# From a project that has never imported "_removed-fixture":
+# From an initialized project whose manifest records `testProject: true`,
+# and that has never imported "_removed-fixture":
 node dist/index.js import _removed-fixture
 echo "exit=$?"
 ```
 
-Expected result: exit `1`, output naming `_removed-fixture` as removed and stating nothing was changed; no `.claude/skills/_removed-fixture` (or equivalent harness folder) created; `hatch.manifest.json` unchanged (or not created, on a first-ever import).
+Expected result: exit `1`, output naming `_removed-fixture` as removed and stating nothing was changed; no `.claude/skills/_removed-fixture` (or equivalent harness folder) created; `hatch.manifest.json` unchanged.
+
+The opt-in is part of the precondition because `_removed-fixture` is testing content ([0027-testing-skill-convention](0027-testing-skill-convention.md)): in an ordinary project the same command reports the registry's not-found wording instead, revealing nothing about the fixture at all. That is 0027 working as decided, not this record failing. The project must already be initialized, since `hatch import` requires a manifest ([0015-import-harness-selection-flag](0015-import-harness-selection-flag.md)).
 
 ## Precedence
 
 - Narrows [0019-registry-removed-metadata-flag](0019-registry-removed-metadata-flag.md)'s Agent Rule "MUST NOT block, fail, or alter the primary operation because of a flagged entry" — that rule continues to govern every case *except* a first-time import of the exact named primary target, which this record carves out. [0019](0019-registry-removed-metadata-flag.md)'s own status remains `accepted`; the two records together, read in order, state the full rule.
 - Builds on [0013-registry-group-structure-and-permanence](0013-registry-group-structure-and-permanence.md) (a removed folder's content and name remain fully fetchable — this record blocks *newly choosing* to depend on it, not the fetch itself) and [0009-skill-versioning-semver-tags](0009-skill-versioning-semver-tags.md) (the version-bump discipline that keeps a historical pinned tag's `removed` state accurate).
+- [0027-testing-skill-convention](0027-testing-skill-convention.md) runs ahead of this record's block: when the target is testing content and the project has not opted in, that record's not-found refusal fires first and this block is never reached. The two do not conflict — 0027 decides whether a name is visible at all, this record decides whether a visible, removed name may be newly depended on.
 - The registry-side "does a group's current version depend on a removed skill" check and the project-level sync command are both explicitly out of scope for this record — recorded, not designed, as the two unfinished proposals named in Consequences.
 - No known conflicting decision records.
