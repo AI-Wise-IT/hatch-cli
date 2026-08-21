@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-08-21
+goal: Rethink branching and release cadence so changes stage together and are
+  reviewed as a batch rather than per pull request
