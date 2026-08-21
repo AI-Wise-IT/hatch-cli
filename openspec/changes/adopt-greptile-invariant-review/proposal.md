@@ -10,7 +10,7 @@ Two kinds of rule are left over, and this change is about them.
 
 **The rules no record's check reaches.** A record carries one check, and a record's Agent Rules are many. A green run means every record's *declared* check passed, not that every `MUST` in the corpus holds. [0026](../../../docs/architecture/decisions/0026-git-optional-dependency.md)'s check confirms git is reached through one module and never initialized; it says nothing about whether every command warns before a destructive removal in a project without a repository. That gap is the larger half of what is still unenforced, and it is the half a diff-aware reviewer is actually good at.
 
-[Greptile](https://www.greptile.com/) reviews pull requests against a graph index of the repository, and takes custom rules as *standards written in plain English*. That is the same shape as an ADR's Agent Rules — no translation into a query language, no second formalism to maintain. Its `.greptile/files.json` points the reviewer at files in the repository as review context, so the records themselves can be the source it reads rather than a restatement of them. Continuous review on every pull request is also the right cadence for rules whose whole purpose is to catch a change before it lands, rather than to describe the world after it has already drifted.
+[Greptile](https://www.greptile.com/) reviews pull requests against a graph index of the repository, and takes custom rules as *standards written in plain English*. That is the same shape as an ADR's Agent Rules — no translation into a query language, no second formalism to maintain. Its `.greptile/files.json` points the reviewer at files in the repository as review context, so the records themselves can be the source it reads rather than a restatement of them. Reviewing a change before it lands is also the right moment for rules whose whole purpose is to catch a violation on its way in, rather than to describe the world after it has already drifted.
 
 A reviewer that can be silently switched off is worse than no reviewer, because the record would claim a judge it no longer has. So the delegation is not a matter of trust: the link between a record and the rule that carries its judgment becomes a machine check like any other, executed by the same runner, on every pull request, blocking.
 
@@ -18,7 +18,7 @@ What this change settles is **the standard for how Greptile is used here** — w
 
 ## What Changes
 
-- **Greptile Cloud is adopted on `hatch-cli` and `hatch-skills`**, reviewing every pull request in both. This indexes the private registry repository on third-party infrastructure — a decision about the registry's confidentiality, taken deliberately and recorded, not a procurement detail.
+- **Greptile Cloud is adopted on `hatch-cli` and `hatch-skills`**, reviewing changes in both before they reach `main`. How often that happens is settled below, not here. This indexes the private registry repository on third-party infrastructure — a decision about the registry's confidentiality, taken deliberately and recorded, not a procurement detail.
 - **All configuration lives in `.greptile/` in each repository, and none in the dashboard.** Dashboard rules and repository configuration are separate systems that do not sync, and dashboard state is invisible to a checkout — the exact drift failure mode [ADR-0009](../../../docs/architecture/decisions/0009-skill-versioning-semver-tags.md) and [ADR-0019](../../../docs/architecture/decisions/0019-registry-removed-metadata-flag.md) each rejected an index for. Configuration that a machine check cannot read is configuration that can rot unobserved.
 - **`.greptile/files.json` references `docs/architecture/decisions/`**, so the reviewer reads the records as written. `.greptile/config.json` then carries one rule per delegated decision, keyed by the record's id, whose text names what the reviewer must establish and cites the record rather than repeating its rules. The duplicate that remains is a pointer, not a copy — and a check can assert it points somewhere real.
 - **Each repository carries its own root configuration, and neither holds a copy of a record.** The records live in `hatch-cli`. `hatch-skills` carries its own root configuration whose rules cite those records and read them across the repository boundary. A copy of a record in `hatch-skills` would be precisely the duplicate this shape exists to avoid, so the cross-repository reach is a requirement of the design rather than a convenience.
@@ -44,7 +44,7 @@ What this change settles is **the standard for how Greptile is used here** — w
 
 ### New Capabilities
 
-- `continuous-code-review`: an external reviewer examines every pull request in both repositories against standards held in version-controlled configuration, derived from the decision records rather than restated, in an advisory posture.
+- `continuous-code-review`: an external reviewer examines changes in both repositories against standards held in version-controlled configuration, derived from the decision records rather than restated, in an advisory posture. The standard fixes where those standards live and how they bind to a record; how often a review runs is deliberately not part of it.
 
 ### Modified Capabilities
 
