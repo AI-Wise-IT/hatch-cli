@@ -3,10 +3,10 @@
 ## Metadata
 
 - **id:** rescope-0001-standalone-version-pinning
-- **supersedes (partially):** `intake/mvp-scope.md`'s exclusion-register entry "Want — recipe steps pinning an exact skill version" (under "Deferred — recipes carved out entirely")
+- **supersedes (partially):** the MVP scoping step's exclusion of "Want — recipe steps pinning an exact skill version", deferred at the time as part of the recipes carve-out
 - **decision_record:** `intake/rescope-0001-standalone-version-pinning.md`
 
-`intake/mvp-scope.md` is a decision record, not living documentation: "a later re-scoping decision is a new record, not a rewrite of this one." This file is that new record. `intake/mvp-scope.md` itself is left unedited.
+The MVP scoping step produced a decision record, not living documentation: a later re-scoping decision is a new record rather than a rewrite of the original. This file is that new record.
 
 ## What changed
 
@@ -37,12 +37,12 @@ Use case doc updated to reflect this: `docs/use-cases/import-content.md` (UC-3) 
 
 **Still out of scope, unaffected by this re-scope:**
 
-- Recipes themselves — schema, pre-flight validation, rollback, step ordering — remain fully deferred per `intake/mvp-scope.md`, waiting on recipe design being revisited.
+- Recipes themselves — schema, pre-flight validation, rollback, step ordering — remain fully deferred, waiting on recipe design being revisited; recorded as the unfinished proposal `openspec/changes/add-recipe-support/`.
 - Validating a range pin's floor against anything (e.g. refusing an import that would resolve below a recorded floor) — the range pin is descriptive only in this scope.
 - A project-manifest record of which recipe/CLI version produced the current state — still deferred with recipes.
 
 ## Consequences
 
-- Batch 7's contents grow to include AF-10/AF-11/AF-12 alongside its original AF-1–AF-4 scope; `docs/build-plan.md`'s Batch 7 entry is updated accordingly as part of this re-scope.
+- The re-import work's contents grow to include AF-10/AF-11/AF-12 alongside its original AF-1–AF-4 scope.
 - Batch 7's manifest work now needs a pin-state field per skill/group entry, likely another schema migration (v2 → v3) alongside whatever AF-1–AF-4 already require — an implementation decision for that batch, not fixed here.
 - No architecture decision record exists yet for the pin-state manifest shape or the version-string parsing (`@1.2.0` vs `@^1.2.0` vs `@latest`); Batch 7's build should record one (extending or following the pattern of [0009-skill-versioning-semver-tags](../docs/architecture/decisions/0009-skill-versioning-semver-tags.md) and [0017-manifest-schema-v2-group-membership](../docs/architecture/decisions/0017-manifest-schema-v2-group-membership.md)) rather than deciding the shape silently.

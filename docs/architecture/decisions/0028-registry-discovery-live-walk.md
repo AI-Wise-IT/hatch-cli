@@ -39,7 +39,7 @@ What constrained the mechanism:
 - **[0025-harness-shadowing-risk-accepted](0025-harness-shadowing-risk-accepted.md) established that a lone `<x>-<code>` folder is structurally indistinguishable from an ordinary skill ending in a reserved code.** Any single-snapshot folding rule has to be sound under that.
 - **[0027-testing-skill-convention](0027-testing-skill-convention.md) closed by naming this surface** — "a future registry discovery surface has to decide whether testing skills appear in listings; this record settles only that they cannot be imported." This record answers it: they are omitted from an ordinary project's listing, and appear only in a project recording `testProject: true`.
 - **The registry holds fifteen top-level folders today** — twelve `_`-prefixed fixtures and three real entries. A per-entry walk costs roughly thirty calls at that size, against an authenticated rate limit of 5,000/hour.
-- **Scriptable output is a permanent No** in `intake/mvp-scope.md`, and local caching of fetched registry content is another. Neither is reopened here.
+- **Scriptable output is a permanent No**, and local caching of fetched registry content is another — both on the PRD's own No list (`intake/product-requirements.md`). Neither is reopened here.
 
 The decision itself was settled with the developer in the `add-registry-listing` change's proposal and design (`openspec/changes/add-registry-listing/`), which this record makes citable from outside that change.
 

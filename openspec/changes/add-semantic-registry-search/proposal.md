@@ -6,7 +6,7 @@
 
 "Which skill helps me write requirements?" finds nothing, because the skill is called `prd-elicitation` and the word *requirements* appears in its description, not its name. Substring matching over descriptions would not fix this either: the useful query is rarely a literal substring of the answer. The gap is between how someone describes what they want and how the content that does it happens to be named.
 
-This matters most for exactly the caller [backlog-0003](../../../intake/backlog-0003-registry-search-list.md) was written about. An agent working from a task description has a rich statement of intent and no knowledge of the registry's vocabulary — the case where meaning-based matching helps most and name matching helps least.
+This matters most for exactly the caller that prompted [`add-registry-listing`](../add-registry-listing/proposal.md): an agent working from a task description, with a rich statement of intent and no knowledge of the registry's vocabulary — the case where meaning-based matching helps most and name matching helps least.
 
 ## What Changes
 
@@ -31,7 +31,7 @@ Provisional and probably premature. A capability worth specifying does not exist
 
 Every one of these is unanswered, and the first three would each, on their own, decide whether this is buildable in anything like its current framing.
 
-- **Where the embeddings live.** They have to be computed and stored somewhere. A registry-side index computed in CI is the obvious answer and runs straight into [`add-registry-listing`](../add-registry-listing/design.md)'s reasoning for not building one — plus [ADR-0009](../../../docs/architecture/decisions/0009-skill-versioning-semver-tags.md) and [ADR-0019](../../../docs/architecture/decisions/0019-registry-removed-metadata-flag.md), which both rejected a second artifact that must agree with the tree. Storing them locally runs into `intake/mvp-scope.md`'s permanent No on caching fetched registry content.
+- **Where the embeddings live.** They have to be computed and stored somewhere. A registry-side index computed in CI is the obvious answer and runs straight into [`add-registry-listing`](../add-registry-listing/design.md)'s reasoning for not building one — plus [ADR-0009](../../../docs/architecture/decisions/0009-skill-versioning-semver-tags.md) and [ADR-0019](../../../docs/architecture/decisions/0019-registry-removed-metadata-flag.md), which both rejected a second artifact that must agree with the tree. Storing them locally runs into `intake/product-requirements.md`'s permanent No on caching fetched registry content.
 - **What computes the query embedding.** A hosted service means the CLI gains a network dependency beyond GitHub and an API key beyond the registry credential. A local model means a package distributed via `npx` gains a model download. Neither fits what this CLI currently is.
 - **Whether this belongs in the CLI at all.** A search surface with an index behind it may be a different product from a CLI that fetches folders from a private repo. Worth asking before assuming it is a command.
 - **Whether descriptions are enough signal.** One sentence per entry is a thin corpus. Embedding the full `SKILL.md` body would be richer and much more to fetch, store and keep current.

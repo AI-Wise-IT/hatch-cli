@@ -42,7 +42,7 @@ Surfaced directly to the developer as a genuine open decision — whether to add
 - `hatch import`'s group-unpack path (Batch 6) must write a `group` field on every member skill's manifest entry it places, and must write the group's own name as a top-level `skills` entry with the group's version.
 - A standalone (non-group) `hatch import` continues to write a `skills[name] = {version}` entry with no `group` field, unchanged from today.
 - Batch 8 (UC-4 AF-4) can read `skills[name].group` directly to determine whether a removal target belongs to a group, and name that group in its refusal — no new manifest work required in that batch.
-- `docs/build-plan.md`'s Batch 6 entry and `hatch import`'s manifest-write logic must reflect schema v2 from this batch forward.
+- `hatch import`'s manifest-write logic reflects schema v2 from the group-import work forward.
 
 ## Agent Rules
 
@@ -69,5 +69,5 @@ Expected result: any `hatch.manifest.json` written after this record's implement
 
 - Resolves the open item [0013-registry-group-structure-and-permanence](0013-registry-group-structure-and-permanence.md)'s Consequences section flagged without settling: how the manifest records group membership for Batch 8's benefit.
 - Builds on [0010-manifest-schema-migrations](0010-manifest-schema-migrations.md) (the versioned migration-chain mechanism this record's v1->v2 migration is the first real exercise of).
-- Depended on by Batch 8 (UC-4 AF-4, `docs/build-plan.md`) — that batch's group-membership removal-refusal logic reads the `group` field this record establishes.
+- Depended on by `hatch remove` (UC-4 AF-4) — its group-membership removal-refusal logic reads the `group` field this record establishes.
 - No known conflicting decision records.

@@ -8,7 +8,7 @@ See [proposal.md](proposal.md) — Why. The constraints that shape the approach:
 - **A `404` means two different things at two different paths.** On a named folder it is genuinely ambiguous between "no such name" and "this credential cannot see the registry" — a private repository answers both with the same status. On the repository root it is not ambiguous at all: the root exists for anyone who can see the repository.
 - **Harness variants cannot be told from ordinary names in isolation.** ADR-0025 (`docs/architecture/decisions/0025-harness-shadowing-risk-accepted.md`) established this concretely — `_harness-suffix-fixture-cld` beside `_harness-suffix-fixture` is a legitimate variant pair, and a lone `<x>-<code>` is structurally identical to an ordinary skill ending in a reserved code. Any single-snapshot rule has to be sound under that.
 - **The registry holds fifteen top-level folders today** — twelve `_`-prefixed fixtures and three real entries. A listing that fetches metadata per entry costs roughly thirty calls at today's size.
-- **Scriptable output is a standing No.** `intake/mvp-scope.md` records it as permanent for `hatch import`; nothing about a listing reopens it.
+- **Scriptable output is a standing No.** The PRD (`intake/product-requirements.md`) records it as permanent for `hatch import`; nothing about a listing reopens it.
 
 ## Goals / Non-Goals
 
@@ -22,7 +22,7 @@ See [proposal.md](proposal.md) — Why. The constraints that shape the approach:
 **Non-Goals:**
 
 - Making `hatch list` fast at a registry size the registry does not have. The live walk is chosen knowing its cost grows linearly; the index is the recorded answer if that ever bites.
-- Caching anything between runs. Local caching of fetched registry content is a permanent No in `intake/mvp-scope.md`, and this command does not carve an exception.
+- Caching anything between runs. Local caching of fetched registry content is a permanent No on the PRD's No list (`intake/product-requirements.md`), and this command does not carve an exception.
 - Making the testing-content exclusion a security boundary. It hides content from a listing the same way the import gate stops an accident, not a determined reader.
 
 ## Decisions
