@@ -6,7 +6,7 @@ Hatch CLI — import and manage AI coding-agent skills across projects, from any
 npx @ai-wise/hatchcli@latest
 ```
 
-Status: `login`, `init`, `import`, `remove`, and `check-collisions` are implemented — see
+Status: `login`, `init`, `list`, `import`, `remove`, and `check-collisions` are implemented — see
 `docs/use-cases/` for behavior and `docs/build-plan.md` for build history.
 
 Point Hatch at a project that already exists: `hatch init --harness claude` writes the

@@ -40,6 +40,14 @@ export interface GroupSkillJson {
   // folder, but a version published before that rule carries none — absent
   // reads as ordinary content, never as an error.
   testing?: boolean;
+  // UC-6: a group's own description, the prose `hatch list` prints for it.
+  // A group has no SKILL.md of its own, so its manifest is where its own
+  // prose lives; a plain skill's description is never read from here — it
+  // comes from its SKILL.md frontmatter (see description.ts). Registry CI
+  // requires the field on every group, but a version published before that
+  // rule carries none — absent, empty or non-string reads as no
+  // description, never an error, so those versions stay parseable.
+  description?: string;
 }
 
 export interface ResolvedMember {
@@ -94,9 +102,13 @@ export function parseGroupSkillJson(
   const version = typeof obj.version === "string" ? obj.version : "0.0.0";
   const removed = obj.removed === true ? true : undefined;
   const testing = obj.testing === true ? true : undefined;
+  const description =
+    typeof obj.description === "string" && obj.description.trim() !== ""
+      ? obj.description.trim()
+      : undefined;
 
   if (obj.members === undefined) {
-    return { version, removed, testing };
+    return { version, removed, testing, description };
   }
   if (!Array.isArray(obj.members)) {
     throw new GroupResolveError(
@@ -107,7 +119,7 @@ export function parseGroupSkillJson(
   const members = obj.members.map((entry, index) =>
     parseMemberSpec(entry, folderLabel, index),
   );
-  return { version, members, removed, testing };
+  return { version, members, removed, testing, description };
 }
 
 function parseMemberSpec(

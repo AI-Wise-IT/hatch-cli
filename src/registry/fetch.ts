@@ -119,6 +119,73 @@ export async function registryFolderExists(
   return { ok: true, exists: result.kind === "ok" };
 }
 
+export interface RegistryRootEntry {
+  name: string;
+  type: ContentsEntry["type"];
+}
+
+export interface RegistryRootListingOk {
+  ok: true;
+  entries: RegistryRootEntry[];
+}
+
+export interface RegistryRootListingFailure {
+  ok: false;
+  // "no-registry-access" is deliberately *not* the "not-found" reason a
+  // named folder's 404 carries. On a named folder a 404 is genuinely
+  // ambiguous between "no such name" and "this credential cannot see the
+  // registry" — the ambiguity `hatch import`'s wording depends on
+  // (0027-testing-skill-convention.md). On the repository root it is not
+  // ambiguous at all: the root exists for anyone who can see the
+  // repository, so the only reading is a credential without access.
+  reason: "unreachable" | "no-registry-access";
+  detail: string;
+}
+
+export type RegistryRootListingResult =
+  | RegistryRootListingOk
+  | RegistryRootListingFailure;
+
+// A single, non-recursive contents-API call over the registry root, giving
+// every top-level entry's name and type — the one call shape `hatch list`
+// (UC-6) needs, and the only one that enumerates the registry rather than
+// asking about a name already known. Contents on a directory returns names
+// and types without file contents, so per-entry metadata still costs a call
+// each; this is the enumeration step, not a batched fetch.
+export async function listRegistryRoot(
+  token: string,
+): Promise<RegistryRootListingResult> {
+  const result = await getContents(token, "");
+
+  if (result.kind === "network-error") {
+    return {
+      ok: false,
+      reason: "unreachable",
+      detail: `could not reach the registry (${result.message})`,
+    };
+  }
+  if (result.kind === "not-found") {
+    return {
+      ok: false,
+      reason: "no-registry-access",
+      detail: "the registry root could not be read with these credentials",
+    };
+  }
+  if (result.kind === "unexpected-status") {
+    return {
+      ok: false,
+      reason: "unreachable",
+      detail: `the registry responded with an unexpected status (${result.status})`,
+    };
+  }
+
+  const entries = Array.isArray(result.body) ? result.body : [result.body];
+  return {
+    ok: true,
+    entries: entries.map((entry) => ({ name: entry.name, type: entry.type })),
+  };
+}
+
 export interface RegistryFileOk {
   ok: true;
   content: string;

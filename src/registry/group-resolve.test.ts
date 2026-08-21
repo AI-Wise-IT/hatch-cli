@@ -113,6 +113,73 @@ describe("parseGroupSkillJson", () => {
   });
 });
 
+describe("parseGroupSkillJson — a group's own description (UC-6)", () => {
+  it("reads a group's description alongside version and members", () => {
+    const result = parseGroupSkillJson(
+      JSON.stringify({
+        version: "1.0.0",
+        description: "Everything needed to run a discovery workshop.",
+        members: [{ kind: "nested", name: "bar" }],
+      }),
+      "workshop-group",
+    );
+
+    expect(result.description).toBe(
+      "Everything needed to run a discovery workshop.",
+    );
+    expect(result.version).toBe("1.0.0");
+    expect(result.members).toEqual([{ kind: "nested", name: "bar" }]);
+  });
+
+  it("trims surrounding whitespace off the value it reads", () => {
+    const result = parseGroupSkillJson(
+      JSON.stringify({
+        version: "1.0.0",
+        description: "  padded description  ",
+        members: [],
+      }),
+      "workshop-group",
+    );
+
+    expect(result.description).toBe("padded description");
+  });
+
+  it("reads an absent description as no description", () => {
+    expect(
+      parseGroupSkillJson(skillJson("1.0.0", []), "workshop-group").description,
+    ).toBeUndefined();
+    expect(
+      parseGroupSkillJson(skillJson("1.0.0"), "plain-skill").description,
+    ).toBeUndefined();
+  });
+
+  it("reads an empty or whitespace-only description as no description", () => {
+    expect(
+      parseGroupSkillJson(
+        JSON.stringify({ version: "1.0.0", description: "" }),
+        "workshop-group",
+      ).description,
+    ).toBeUndefined();
+    expect(
+      parseGroupSkillJson(
+        JSON.stringify({ version: "1.0.0", description: "   " }),
+        "workshop-group",
+      ).description,
+    ).toBeUndefined();
+  });
+
+  it("reads a non-string description as no description rather than raising", () => {
+    for (const value of [42, true, null, ["a"], { text: "a" }]) {
+      const result = parseGroupSkillJson(
+        JSON.stringify({ version: "1.0.0", description: value }),
+        "workshop-group",
+      );
+      expect(result.description).toBeUndefined();
+      expect(result.version).toBe("1.0.0");
+    }
+  });
+});
+
 describe("resolveGroupMembers — nested members", () => {
   it("resolves nested members directly from the group's own fetched content, versioned as the group", async () => {
     const rootFiles = new Map([

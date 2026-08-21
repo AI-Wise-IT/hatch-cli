@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { runCheckCollisions } from "./commands/check-collisions.js";
 import { runImport } from "./commands/import.js";
 import { runInit } from "./commands/init.js";
+import { runList } from "./commands/list.js";
 import { runLogin } from "./commands/login.js";
 import { runRemove } from "./commands/remove.js";
 
@@ -22,6 +23,8 @@ if (!command) {
   process.exitCode = await runLogin();
 } else if (command === "init") {
   process.exitCode = await runInit(rest);
+} else if (command === "list") {
+  process.exitCode = await runList(rest);
 } else if (command === "import") {
   process.exitCode = await runImport(rest);
 } else if (command === "remove") {
