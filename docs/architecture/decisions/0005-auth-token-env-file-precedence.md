@@ -75,18 +75,27 @@ The developer confirmed directly, while this cluster was being settled, that Cla
 
 ## Invariants
 
-- **The credential-resolution order: `HATCH_TOKEN`, then `~/.hatch/credentials.json`, then an interactive prompt.** Becomes irreversible once: any real developer or CI pipeline has configured `HATCH_TOKEN`, or come to rely on the file fallback — renaming the variable or reordering precedence would silently break existing automated setups rather than failing loudly. The prompt's position last is part of the invariant, not an implementation detail: promoting it above either other tier would turn a configured automated setup into one that blocks for input. Enforcement mechanism: none — an unenforced convention in the CLI's credential-resolution code. Current mode: not-yet-built.
+- **The credential-resolution order: `HATCH_TOKEN`, then `~/.hatch/credentials.json`, then an interactive prompt.** Becomes irreversible once: any real developer or CI pipeline has configured `HATCH_TOKEN`, or come to rely on the file fallback — renaming the variable or reordering precedence would silently break existing automated setups rather than failing loudly. The prompt's position last is part of the invariant, not an implementation detail: promoting it above either other tier would turn a configured automated setup into one that blocks for input. Enforcement mechanism: `hatch-cli`'s CI `decision-records` job, which executes this record's Machine Check on every pull request — it confirms all three tiers are present and that no command module outside `src/commands/login.ts` resolves credentials on its own. Their *order* stays unenforced: it is prose an agent obeys, not a fact a command reads. Current mode: blocking.
 
 ## Machine Check
 
+- **context:** cli-repo
+
 ```bash
-grep -q "HATCH_TOKEN" src/auth/credentials.ts && grep -q "credentials.json" src/auth/credentials.ts && grep -q "promptHidden" src/auth/authenticate.ts && echo "three tiers present"
-grep -rln "writeCredentials\|resolveToken" src/ --include=*.ts | grep -v "\.test\.ts" | grep -v "^src/auth/"
+grep -q "HATCH_TOKEN" src/auth/credentials.ts || { echo "missing env tier"; exit 1; }
+grep -q "credentials.json" src/auth/credentials.ts || { echo "missing file tier"; exit 1; }
+grep -q "promptHidden" src/auth/authenticate.ts || { echo "missing prompt tier"; exit 1; }
+echo "three tiers present"
+callers=$(grep -rln "writeCredentials\|resolveToken" src/ --include=*.ts | grep -v "\.test\.ts" | grep -v "^src/auth/")
+[ "$callers" = "src/commands/login.ts" ] || { echo "credential resolution outside the shared step:"; echo "$callers"; exit 1; }
+echo "credential resolution confined to the shared step: correct"
 ```
 
-Expected result: the first command prints `three tiers present` — all three tiers exist, and the env/file pair lives in one module rather than being scattered.
+Expected result: `three tiers present`, then `credential resolution confined to the shared step: correct`, exit 0.
 
-The second lists every command module that touches credential resolution outside the shared step. It must print exactly `src/commands/login.ts`, the one sanctioned exception. Any other path is a command that has grown its own copy of the precedence — the drift the shared step exists to prevent, and what this record's second Agent Rule forbids.
+The first three lines assert that all three tiers exist and that the env/file pair lives in one module rather than being scattered. The last pair asserts that exactly one command module — `src/commands/login.ts`, the one sanctioned exception — touches credential resolution outside the shared step. Any other path is a command that has grown its own copy of the precedence: the drift the shared step exists to prevent, and what this record's second Agent Rule forbids.
+
+The check establishes that the three tiers exist and are not duplicated. Their *order* is prose an agent obeys, not a fact this command reads.
 
 ## Precedence
 

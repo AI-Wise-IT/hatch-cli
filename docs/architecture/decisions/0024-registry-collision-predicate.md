@@ -70,11 +70,17 @@ None beyond what [0014-registry-collision-detection](0014-registry-collision-det
 
 ## Machine Check
 
-```bash
-grep -n "distinct physical" ../hatch-cli/src/registry/*.ts
-```
+- **context:** review-only
+- **reason:** what this record asserts is that the collision predicate compares *distinct physical source paths* rather than name shape. Its previous check grepped the module for the phrase "distinct physical" — a comment, which passes whether or not the predicate behind it is correct, and fails if a correct implementation is worded differently. The success of that command was unrelated to the property.
 
-Expected result (run from a checkout with access to the collision-check module once built): the collision-check module's own comments/logic reference comparing physical source paths, not name shape, confirming the predicate implemented matches this record rather than a suffix-shape heuristic.
+A reviewer establishes it by reading `src/registry/collision-check.ts` and confirming that the set it compares is built from:
+
+- each top-level standalone skill folder's own literal name, and
+- each group's nested member folders (`<group>/<member-name>/`), physically inside that group's registry folder;
+
+that pointer members contribute no comparison target of their own, only a reference to a top-level entry already in the set; that no name-shape or harness-suffix heuristic participates in the predicate; and that the comparison runs once per harness the CLI supports, reporting which harness(es) a detected collision affects.
+
+The unit tests in `src/registry/collision-check.test.ts` exercise these cases; what no command establishes is that the implementation's predicate *is* this one rather than something that happens to agree on today's registry content.
 
 ## Precedence
 

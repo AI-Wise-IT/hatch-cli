@@ -53,6 +53,8 @@ None. Test-runner choice is entirely internal — no external dependent observes
 
 ## Machine Check
 
+- **context:** cli-repo
+
 ```bash
 grep -q '"vitest"' package.json
 ```

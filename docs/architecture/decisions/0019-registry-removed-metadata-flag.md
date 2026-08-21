@@ -50,18 +50,21 @@ Surfaced directly to the developer rather than guessed, mirroring the standing p
 
 ## Invariants
 
-- **The `removed` field's shape: a plain boolean on `skill.json`, never a separate status enum or index file.** Becomes irreversible once: real registry content uses this flag and the CLI's parser depends on its exact shape — switching to a richer status representation later would need to handle every already-published `removed: true` folder written under the old shape. Enforcement mechanism: none dedicated; covered only by ordinary registry-content review today. Current mode: not-yet-built.
+- **The `removed` field's shape: a plain boolean on `skill.json`, never a separate status enum or index file.** Becomes irreversible once: real registry content uses this flag and the CLI's parser depends on its exact shape — switching to a richer status representation later would need to handle every already-published `removed: true` folder written under the old shape. Enforcement mechanism: `hatch-skills`' CI `decision-records` job, which executes this record's Machine Check against the registry checkout on every pull request — it confirms the flagged fixture carries `"removed": true` and that ordinary content carries no `removed` field at all. That the field is a plain boolean rather than a richer status is not itself read by the check. Current mode: blocking.
 
 ## Machine Check
 
-Run against a sibling `hatch-skills` checkout. The two named folders are real registry content: `_removed-fixture` is the flagged fixture, `prd-elicitation` is ordinary content.
+- **context:** registry-checkout
+
+The two named folders are real registry content: `_removed-fixture` is the flagged fixture, `prd-elicitation` is ordinary content.
 
 ```bash
-grep -q '"removed": true' ../hatch-skills/_removed-fixture/skill.json && echo "flagged fixture carries removed: correct"
-grep -q '"removed"' ../hatch-skills/prd-elicitation/skill.json && echo "VIOLATION: ordinary content carries removed" || echo "ordinary content carries no removed field: correct"
+grep -q '"removed": true' ./_removed-fixture/skill.json || { echo "VIOLATION: flagged fixture carries no removed field"; exit 1; }
+grep -q '"removed"' ./prd-elicitation/skill.json && { echo "VIOLATION: ordinary content carries removed"; exit 1; }
+echo "removed present on the flagged fixture and absent from ordinary content: correct"
 ```
 
-Expected result: both confirmation lines — a folder intentionally flagged removed shows `"removed": true` in its own `skill.json`, and ordinary content carries no `removed` field at all, since absence is what this record defines as active.
+Expected result: the confirmation line, exit 0 — a folder intentionally flagged removed shows `"removed": true` in its own `skill.json`, and ordinary content carries no `removed` field at all, since absence is what this record defines as active.
 
 ## Precedence
 

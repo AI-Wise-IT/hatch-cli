@@ -68,13 +68,17 @@ The three harnesses in scope today are Claude, Codex, and Cursor, with abbreviat
 
 ## Machine Check
 
-Run from the `hatch-cli` checkout. What this record still asserts and a machine can still verify is the single-source-of-truth rule: every consumer reaches the reserved codes through the harness registry module, and no module carries its own copy.
+- **context:** cli-repo
+
+What this record still asserts and a machine can still verify is the single-source-of-truth rule: every consumer reaches the reserved codes through the harness registry module, and no module carries its own copy.
 
 ```bash
-grep -rnE "[\"'](cld|cdx|csr)[\"']" src/ --include=*.ts | grep -v "^src/harness-registry" | grep -v "\.test\.ts" || echo "no hardcoded harness codes: correct"
+matches=$(grep -rnE "[\"'](cld|cdx|csr)[\"']" src/ --include=*.ts | grep -v "^src/harness-registry" | grep -v "\.test\.ts")
+if [ -n "$matches" ]; then echo "$matches"; exit 1; fi
+echo "no hardcoded harness codes: correct"
 ```
 
-Expected result: the "no hardcoded harness codes" line. Any path printed is a module holding a literal reserved code instead of reading it from `src/harness-registry.ts`, which is what this record forbids — test files are excluded because a test asserting resolution behavior legitimately names the codes it is testing.
+Expected result: the "no hardcoded harness codes" line, exit 0. Any path printed is a module holding a literal reserved code instead of reading it from `src/harness-registry.ts`, which is what this record forbids — test files are excluded because a test asserting resolution behavior legitimately names the codes it is testing.
 
 The codes in the pattern are today's reserved set and must be extended by hand when the registry grows; this check verifies that consumers read from the registry, not that the registry's own membership is correct. Name-shape checking is deliberately absent — see Consequences and [0025-harness-shadowing-risk-accepted](0025-harness-shadowing-risk-accepted.md).
 

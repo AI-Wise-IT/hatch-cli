@@ -51,11 +51,10 @@ This gap — whether AF-5 should inherit AF-2/AF-3's gating mechanism or remain 
 
 ## Machine Check
 
-```bash
-grep -n "force-all\|force-clean\|hashDiskTree\|diskTreeIsEmpty" src/commands/remove.ts
-```
+- **context:** review-only
+- **reason:** this record's rule is about *which branch* of `hatch remove` the drift and local-edit gating may appear in. A grep can find the identifiers but cannot tell which branch a match falls in, so its success is unrelated to what the record asserts.
 
-Expected result: every match traces back to the named skill/group removal path (AF-1 through AF-4) — none appear inside the `--harness` argument-parsing or drop-execution branch. (This is a manual-inspection check, not a structural one — the grep alone can't distinguish which branch a match falls in.)
+A reviewer establishes it by reading `src/commands/remove.ts` and confirming that every occurrence of `--force-all`, `--force-clean`, and any disk-hashing or empty-tree helper lies on the named skill/group removal path (AF-1 through AF-4), and that the `--harness` argument-parsing and drop-execution branch reaches none of them — its only precondition being UC-4's "at least one harness must remain".
 
 ## Precedence
 

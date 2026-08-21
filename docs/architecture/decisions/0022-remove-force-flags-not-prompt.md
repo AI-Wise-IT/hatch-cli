@@ -63,11 +63,15 @@ UC-4 ([`docs/use-cases/remove-content.md`](../../use-cases/remove-content.md)) d
 
 ## Machine Check
 
+- **context:** cli-repo
+
 ```bash
-grep -n "promptLine\|stdin.isTTY" src/commands/remove.ts
+matches=$(grep -n "promptLine\|promptHidden\|stdin\.isTTY" src/commands/remove.ts)
+if [ -n "$matches" ]; then echo "$matches"; exit 1; fi
+echo "no prompting in hatch remove: correct"
 ```
 
-Expected result: no output — `src/commands/remove.ts` contains no reference to `promptLine`, `promptHidden`, or `process.stdin.isTTY`; AF-2/AF-3 gating is entirely flag-driven.
+Expected result: the confirmation line, exit 0 — `src/commands/remove.ts` contains no reference to `promptLine`, `promptHidden`, or `process.stdin.isTTY`; AF-2/AF-3 gating is entirely flag-driven. Any line printed is a prompt this record forbids.
 
 ## Precedence
 

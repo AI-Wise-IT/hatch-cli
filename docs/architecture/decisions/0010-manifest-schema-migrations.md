@@ -50,9 +50,11 @@ UC-3 and UC-4's business rule that every `hatch import`/`hatch remove` operation
 
 ## Invariants
 
-- **MUST run every manifest read through the ordered migration-function chain up to the CLI's current schema version.** Becomes irreversible once: any real project has a manifest at a schema version older than the CLI's current version — removing or reordering an already-shipped migration function would strand that project, unable to read its own manifest, directly violating the PRD's own "must never become stuck" constraint. Enforcement mechanism: none dedicated — pure code discipline today; no test currently asserts that every historically-shipped migration key stays registered. Current mode: not-yet-built. This is a strong candidate for an automated regression check (a test asserting the full historical chain of migration keys is still present) before any real project's manifest could be on an old schema version.
+- **MUST run every manifest read through the ordered migration-function chain up to the CLI's current schema version.** Becomes irreversible once: any real project has a manifest at a schema version older than the CLI's current version — removing or reordering an already-shipped migration function would strand that project, unable to read its own manifest, directly violating the PRD's own "must never become stuck" constraint. Enforcement mechanism: `hatch-cli`'s CI `decision-records` job, which executes this record's Machine Check on every pull request — it reads `src/manifest-migrations/index.ts` and fails on any gap between schema version 1 and the current one, which is exactly the historical-chain regression check this invariant needs. Current mode: blocking.
 
 ## Machine Check
+
+- **context:** cli-repo
 
 Run from the `hatch-cli` checkout. This asserts the invariant above directly — every historically-shipped migration key is still registered — reading the source rather than a built artifact or a project's manifest, so it runs in any checkout without a build step.
 

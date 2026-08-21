@@ -61,6 +61,8 @@ Surfaced directly to the developer rather than guessed, mirroring the standing p
 
 ## Machine Check
 
+- **context:** cli-repo
+
 Run from the `hatch-cli` checkout. The checkable fact is the registered migration and the hash's own construction — not a manifest's contents, since no `hatch.manifest.json` lives in either repo.
 
 ```bash

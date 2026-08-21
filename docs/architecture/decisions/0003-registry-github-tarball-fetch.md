@@ -50,6 +50,8 @@ Current practice for "pull one named subdirectory from a private repo into anoth
 
 ## Machine Check
 
+- **context:** cli-repo
+
 Run from the `hatch-cli` checkout.
 
 ```bash

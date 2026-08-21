@@ -52,18 +52,21 @@ Surfaced directly to the developer rather than guessed, mirroring the precedent 
 
 ## Invariants
 
-- **The `members` array's `{kind, name, version?}` shape on a group's `skill.json`.** Becomes irreversible once: any real group has been published using this shape and the CLI's parser depends on it exactly — changing the shape without a compatible migration path would break every already-published group's machine-readability. Enforcement mechanism: none — unlike the project-level manifest ([0010-manifest-schema-migrations](0010-manifest-schema-migrations.md)), a group's own `skill.json` carries no `schemaVersion` field of its own. Current mode: not-yet-built. This is a real gap: registry-content schema has no equivalent to the project-manifest's migration chain, so an incompatible future change here would have no fallback path once real groups are published.
+- **The `members` array's `{kind, name, version?}` shape on a group's `skill.json`.** Becomes irreversible once: any real group has been published using this shape and the CLI's parser depends on it exactly — changing the shape without a compatible migration path would break every already-published group's machine-readability. Enforcement mechanism: `hatch-skills`' CI `decision-records` job, which executes this record's Machine Check against the registry checkout on every pull request — it confirms a group's `skill.json` carries `members` and a plain skill's carries none. The entries' own `{kind, name, version?}` shape stays unread by that check, and unlike the project-level manifest ([0010-manifest-schema-migrations](0010-manifest-schema-migrations.md)) a group's `skill.json` carries no `schemaVersion` of its own, so an incompatible future change to the entry shape would still have no fallback path once real groups are published. Current mode: blocking for the presence rule, not-yet-built for the entry shape.
 
 ## Machine Check
 
-Run against a sibling `hatch-skills` checkout. The two named folders are real registry content: `_group-fixture-combo` is a group, `prd-elicitation` is a plain skill.
+- **context:** registry-checkout
+
+The two named folders are real registry content: `_group-fixture-combo` is a group, `prd-elicitation` is a plain skill.
 
 ```bash
-grep -q '"members"' ../hatch-skills/_group-fixture-combo/skill.json && echo "group carries members: correct"
-grep -q '"members"' ../hatch-skills/prd-elicitation/skill.json && echo "VIOLATION: plain skill carries members" || echo "plain skill carries no members: correct"
+grep -q '"members"' ./_group-fixture-combo/skill.json || { echo "VIOLATION: group carries no members array"; exit 1; }
+grep -q '"members"' ./prd-elicitation/skill.json && { echo "VIOLATION: plain skill carries members"; exit 1; }
+echo "members present on the group and absent from the plain skill: correct"
 ```
 
-Expected result: both confirmation lines. A group's `skill.json` carries a `members` array whose entries each have a `kind` of `"nested"` or `"pointer"` and a `name`; a plain skill's carries no `members` field at all, which is exactly how `hatch import` tells the two apart.
+Expected result: the confirmation line, exit 0. A group's `skill.json` carries a `members` array whose entries each have a `kind` of `"nested"` or `"pointer"` and a `name`; a plain skill's carries no `members` field at all, which is exactly how `hatch import` tells the two apart.
 
 ## Precedence
 

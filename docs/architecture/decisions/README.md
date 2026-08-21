@@ -1,5 +1,146 @@
 # Architecture Decisions
 
+Each file in this directory records one architecture or technology decision. A record is
+not a note: it is the enforceable, agent-readable statement of what the project has
+settled, and the rules below are checked on every pull request rather than trusted.
+
+## The record contract
+
+### Required sections
+
+Every record carries these sections, in this order, each as a level-2 heading:
+
+| Section | Holds |
+|---|---|
+| `## Metadata` | `id`, `component`, `status`, `applies_to`, `decision_record`, as a bullet list |
+| `## Decision` | what was decided, stated normatively |
+| `## Context` | the forces that produced the decision |
+| `## Alternatives Considered` | what was rejected, and why |
+| `## Trade-offs Accepted` | what the decision costs |
+| `## Consequences` | what follows from it |
+| `## Agent Rules` | the MUST / MUST NOT an agent building against this record obeys |
+| `## Invariants` | what becomes irreversible, its enforcement mechanism, and that mechanism's current mode |
+| `## Machine Check` | how a machine — or, where that is impossible, a reviewer — establishes the record still holds |
+| `## Precedence` | how this record relates to the others it touches |
+
+A record may carry further sections beyond these — `## Decision History`, or an
+explicitly-marked `### … correction (post-acceptance)` subsection — but never fewer.
+A record missing any required section is non-conforming and fails the conformance check.
+
+### Status lifecycle
+
+`status` in `## Metadata` is exactly one of:
+
+- **`concept`** — working material. Every section may be edited freely, including
+  Decision, Agent Rules and Invariants. Nothing else may cite a `concept` record as a
+  settled decision, and no agent rule may be derived from one.
+- **`accepted`** — the project is operating under this decision. Its frozen sections are
+  immutable (below).
+- **`superseded`** — replaced by a later record, which the superseded record names.
+  Its check is not executed, because it describes a decision no longer in force.
+
+A record whose `status` is absent, or is any other value, is rejected by the conformance
+check.
+
+### An accepted decision is superseded, never edited
+
+In a record whose status is `accepted`, three sections are **frozen**:
+
+- `## Decision`
+- `## Agent Rules`
+- `## Invariants`
+
+Changing what any of them says requires a **new record that supersedes this one**. It is
+never an edit in place. The original keeps its frozen sections byte-for-byte as accepted
+and its status becomes `superseded`, naming its replacement.
+
+Every other section may be edited: `## Context`, `## Alternatives Considered`,
+`## Trade-offs Accepted`, `## Consequences`, `## Machine Check`, `## Precedence`, and
+explicitly-marked post-acceptance correction sections. Repairing a check that has rotted,
+correcting a fact that has since changed, and adding a cross-reference to a later record
+are maintenance of an unchanged decision, not a new one.
+
+An edit to an editable section must not change what a frozen section mandates. A
+correction that would alter the decision itself is a superseding record.
+
+In a record whose status is `concept`, nothing is frozen.
+
+### Machine Check
+
+`## Machine Check` opens with a context declaration, in the same bullet style as
+`## Metadata`:
+
+```text
+- **context:** cli-repo
+```
+
+The context names what the check needs, and is exactly one of:
+
+| Context | The runner executes the check with |
+|---|---|
+| `cli-repo` | the working directory at the root of a `hatch-cli` checkout |
+| `registry-checkout` | the working directory at the root of a `hatch-skills` checkout |
+| `both` | the working directory at the root of a `hatch-cli` checkout, and `$HATCH_REGISTRY` holding the path to a `hatch-skills` checkout |
+| `live-github` | *nothing* — the record asserts live GitHub configuration, which is not in any checkout |
+| `review-only` | *nothing* — establishing the record requires judgment about what code means |
+
+**An executable context** — `cli-repo`, `registry-checkout`, `both` — requires exactly one
+fenced ` ```bash ` block in the section, followed by a line beginning `Expected result:`
+stating what a passing run looks like. The command:
+
+- must run as written, with no placeholder standing in for a path or value a reader is
+  expected to substitute (`<group-folder>` and the like);
+- must not be constructed so that it succeeds regardless of what it finds — a trailing
+  `|| true`, or a `grep` whose only failure mode is swallowed;
+- must distinguish pass from fail by exit status;
+- must not stand in for a property it does not establish. A `grep` that succeeds on the
+  presence of a comment, while the behavior the record asserts goes unexamined, is not a
+  check.
+
+**A non-executable context** — `live-github`, `review-only` — requires a `- **reason:**`
+bullet naming why no command can establish the record, and prose describing what a
+reviewer must establish instead. The runner reports these records as **unverified**,
+never as passing, so a green run never overstates what was actually checked. A record
+whose check cannot be automated declares that; it does not present a command that appears
+to verify it.
+
+### Enforcement
+
+One status check, `decision-records`, runs on every pull request in both repositories and
+blocks a failure:
+
+| Runs in | Does |
+|---|---|
+| `hatch-cli` and `hatch-skills` | Verifies the whole record set conforms, then executes every check whose declared context is executable in that repository, reporting per record: passed, failed, unverified (with its reason), skipped as superseded, or deferred to the other repository's run |
+
+In `hatch-cli` that job carries one further step. It compares each record's frozen
+sections between the pull request's merge base and its head, keyed on the record's status
+**at the merge base**, and fails an edit to a frozen section of an accepted record. It
+runs only there, because that is where the records live, and only on a pull request,
+because a push to `main` has no merge base to compare against.
+
+Conformance is evaluated across the whole record set, not only the records a pull request
+touches, so a record cannot drift out of conformance without a change that names it. A
+check that cannot be located, parsed, or executed is a failure — never a silent skip —
+so a record dropping out of coverage is visible.
+
+The check is blocking from the moment it lands. It protects the integrity of the decision
+record set itself rather than a pre-launch cleanup window, so it had no advisory period.
+
+Run the conformance check and every machine check locally with:
+
+```bash
+node scripts/adr/check.mjs --registry ../hatch-skills
+```
+
+Run the immutability comparison against whatever you branched from:
+
+```bash
+node scripts/adr/check-immutability.mjs --base main
+```
+
+## Index
+
 | # | id | component | status | path |
 |---|----|-----------|--------|------|
 | 0001 | `0001-harness-suffix-convention` | skill-registry-harness-targeting | accepted | [`0001-harness-suffix-convention.md`](0001-harness-suffix-convention.md) |

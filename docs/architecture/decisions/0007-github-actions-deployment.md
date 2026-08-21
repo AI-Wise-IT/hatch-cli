@@ -66,6 +66,8 @@ None. Trigger mechanics, OIDC vs. token auth, and vendor choice are all internal
 
 ## Machine Check
 
+- **context:** cli-repo
+
 ```bash
 find .github/workflows -name "*.yml" -exec grep -l "npm publish" {} \; | xargs grep -A2 "^on:" | grep -q "tags"
 ```

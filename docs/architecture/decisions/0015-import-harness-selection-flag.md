@@ -62,13 +62,16 @@ None. This governs bootstrap behavior only; once a manifest exists, placement is
 
 ## Machine Check
 
+- **context:** cli-repo
+
 ```bash
-grep -n "isKnownHarness" src/commands/init.ts
-grep -n "hatch init" src/commands/import.ts
-grep -c -- '"--harness"' src/commands/import.ts || echo "no --harness in import: correct"
+grep -q "isKnownHarness" src/commands/init.ts || { echo "hatch init does not validate --harness via isKnownHarness"; exit 1; }
+grep -q "hatch init" src/commands/import.ts || { echo "hatch import does not name hatch init in its no-manifest error paths"; exit 1; }
+grep -q -- '"--harness"' src/commands/import.ts && { echo "VIOLATION: hatch import still parses --harness"; exit 1; }
+echo "harness selection confined to hatch init: correct"
 ```
 
-Expected result: `src/commands/init.ts` validates its `--harness` value via `isKnownHarness`; `src/commands/import.ts` names `hatch init` in its no-manifest error paths; and the third command prints the "no --harness in import" line, because `hatch import` no longer parses that option. Any other outcome indicates this record isn't implemented as decided.
+Expected result: the confirmation line, exit 0 — `src/commands/init.ts` validates its `--harness` value via `isKnownHarness`; `src/commands/import.ts` names `hatch init` in its no-manifest error paths; and `hatch import` no longer parses that option. Any other outcome indicates this record isn't implemented as decided.
 
 ## Precedence
 

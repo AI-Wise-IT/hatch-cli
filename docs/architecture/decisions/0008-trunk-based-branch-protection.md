@@ -49,11 +49,19 @@ None. Branch/PR/review process is internal engineering governance, invisible to 
 
 ## Machine Check
 
-```bash
-gh api repos/:owner/:repo/branches/main/protection --jq '.required_status_checks, .required_pull_request_reviews.required_approving_review_count'
+- **context:** live-github
+- **reason:** branch protection is live repository configuration, present in no checkout, and reading it requires an Administration-scoped token — materially broader than the Contents-read credential this project's CI is limited to.
+
+A reviewer establishes it by running, in each repository:
+
+```text
+gh api repos/:owner/:repo/branches/main/protection \
+  --jq '.required_status_checks, .required_pull_request_reviews.required_approving_review_count'
 ```
 
-Expected result: `required_status_checks` is non-null (at least one check configured); `required_approving_review_count` is `0` or the reviews requirement is absent entirely.
+`required_status_checks` must be non-null with at least one check configured, and `required_approving_review_count` must be `0` or the reviews requirement absent entirely.
+
+The runner reports this record as unverified. Provisioning an Administration-scoped token to automate it was considered and declined: it buys automated verification of two records at the cost of a standing credential with write-adjacent reach over both repositories.
 
 ## Precedence
 

@@ -65,3 +65,40 @@ jobs:
       - name: No harness-registry/resolution changes in this PR
         if: steps.filter.outputs.relevant == 'false'
         run: echo "Skipping — nothing relevant to the collision check changed."
+
+  # ADR contract enforcement (docs/architecture/decisions/README.md). Runs the
+  # whole record set's conformance check, the frozen-section immutability check,
+  # and every machine check whose declared context is the CLI repo or both.
+  # Unlike collision-check this needs no path filter: conformance is evaluated
+  # across the whole corpus on every PR by design, so the job always has work
+  # and always reports a status.
+  decision-records:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # ADR-0014's shape: a checkout scoped by the same Contents-read token.
+      # Only a record declaring context `both` reads it; none does today, and
+      # the checkout is here so one can without a workflow change.
+      - name: Checkout hatch-skills (read-only credential)
+        uses: actions/checkout@v4
+        with:
+          repository: AI-Wise-IT/hatch-skills
+          token: ${{ secrets.HATCH_SKILLS_READ_TOKEN }}
+          path: hatch-skills-checkout
+      - name: Conformance, and every check whose context is this repo
+        run: node scripts/adr/check.mjs --repo cli --registry hatch-skills-checkout
+      - name: Frozen sections of accepted records are unedited
+        if: github.event_name == 'pull_request'
+        run: |
+          node scripts/adr/check-immutability.mjs \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+      - name: Push to main — immutability has no pull request to compare
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "Skipping the immutability check: it compares a pull request against its merge base."
