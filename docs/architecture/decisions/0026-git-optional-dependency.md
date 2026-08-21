@@ -73,13 +73,19 @@ The one consequence worth naming — that a destructive removal in a project wit
 
 ## Machine Check
 
+- **context:** cli-repo
+
 ```bash
-grep -rn "\.init()" src/ --include=*.ts | grep -v "\.test\.ts" || echo "no repository initialization: correct"
-grep -rl "simple-git" src/ --include=*.ts | grep -v "\.test\.ts"
-grep -rn "reset(\[" src/ --include=*.ts || echo "no version-control recovery: correct"
+inits=$(grep -rn "\.init()" src/ --include=*.ts | grep -v "\.test\.ts")
+if [ -n "$inits" ]; then echo "$inits"; exit 1; fi
+consumers=$(grep -rl "simple-git" src/ --include=*.ts | grep -v "\.test\.ts")
+[ "$consumers" = "src/project/version-control.ts" ] || { echo "unexpected simple-git consumers:"; echo "$consumers"; exit 1; }
+resets=$(grep -rn "reset(\[" src/ --include=*.ts)
+if [ -n "$resets" ]; then echo "$resets"; exit 1; fi
+echo "no initialization, one git module, no recovery: correct"
 ```
 
-Expected result: the first command prints the "no repository initialization" line, because no production module calls `init()`. The second prints exactly one path, `src/project/version-control.ts` — every other module reaches git only through it. The third prints the "no version-control recovery" line, because no command recovers via `git reset`. Any other output indicates this record isn't implemented as decided.
+Expected result: the confirmation line, exit 0 — no production module calls `init()`; `src/project/version-control.ts` is the only non-test module reaching git, so every other module reaches git only through it; and no command recovers via `git reset`. Any other output indicates this record isn't implemented as decided.
 
 ## Precedence
 

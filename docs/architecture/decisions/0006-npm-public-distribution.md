@@ -54,16 +54,19 @@ Every other part of this decision — public registry, `latest`-only dist-tag, n
 
 ## Invariants
 
-- **MUST NOT revert the package name from `@ai-wise/hatchcli`.** Becomes irreversible once: any real user has installed or scripted around `npx @ai-wise/hatchcli` — renaming breaks every existing invocation outright, and npm's own registry-immutability policy means an abandoned name/version can never be reclaimed if this one is ever unpublished. Enforcement mechanism: npm's own registry (external to this project) rejects re-publishing a version under a name it's already seen; internally, nothing in CI currently checks `package.json`'s `name` field before publish. Current mode: advisory at best — this record's own Machine Check is a manual grep, not a wired CI gate. Worth promoting to an actual CI check before real users depend on the name.
+- **MUST NOT revert the package name from `@ai-wise/hatchcli`.** Becomes irreversible once: any real user has installed or scripted around `npx @ai-wise/hatchcli` — renaming breaks every existing invocation outright, and npm's own registry-immutability policy means an abandoned name/version can never be reclaimed if this one is ever unpublished. Enforcement mechanism: npm's own registry (external to this project) rejects re-publishing a version under a name it's already seen; internally, `hatch-cli`'s CI `decision-records` job executes this record's Machine Check on every pull request, failing a `package.json` marked private or renamed away from `@ai-wise/hatchcli`. Current mode: blocking.
 
 ## Machine Check
 
+- **context:** cli-repo
+
 ```bash
-grep -q '"private": true' package.json && echo "VIOLATION" || echo "OK"
-grep -q '"name": "@ai-wise/hatchcli"' package.json && echo "OK" || echo "VIOLATION"
+grep -q '"private": true' package.json && { echo "VIOLATION: package.json marks the package private"; exit 1; }
+grep -q '"name": "@ai-wise/hatchcli"' package.json || { echo "VIOLATION: package is not named @ai-wise/hatchcli"; exit 1; }
+echo "public, and named @ai-wise/hatchcli: correct"
 ```
 
-Expected result: `OK` for both — `package.json` does not mark the package private, and is named `@ai-wise/hatchcli`.
+Expected result: the confirmation line, exit 0 — `package.json` does not mark the package private, and is named `@ai-wise/hatchcli`.
 
 ## Precedence
 

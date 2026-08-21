@@ -70,6 +70,8 @@ Surfaced directly to the developer rather than guessed, mirroring the standing p
 
 ## Machine Check
 
+- **context:** cli-repo
+
 Run from the `hatch-cli` checkout. This record's distinctive rule is that `pin` shares [0018](0018-manifest-content-hash-local-edit-detection.md)'s migration rather than claiming a schema version of its own, so what a machine can check is that exactly one migration is keyed `2`.
 
 ```bash

@@ -55,15 +55,20 @@ None in the sense this section usually means. The skill-content repo's privacy i
 
 ## Machine Check
 
-This record decides two things — that both repos are on GitHub, and that they have opposite visibility — so the check verifies both rather than the host alone.
+- **context:** live-github
+- **reason:** what this record asserts — that both repositories are on GitHub and hold opposite visibility — is live organisation configuration, present in no checkout. Reading it needs an authenticated `gh`, and the runner is not given one.
 
-```bash
-git remote get-url origin | grep -q "github.com" && echo "hosted on GitHub: correct"
-test "$(gh api repos/AI-Wise-IT/hatch-skills --jq '.private')" = "true" && echo "skill-content private: correct"
-test "$(gh api repos/AI-Wise-IT/hatch-cli --jq '.private')" = "false" && echo "CLI repo public: correct"
+A reviewer establishes it by running, from anywhere with an authenticated `gh`:
+
+```text
+git remote get-url origin            # inside each repo's checkout: must name github.com
+gh api repos/AI-Wise-IT/hatch-skills --jq '.private'   # must be true
+gh api repos/AI-Wise-IT/hatch-cli    --jq '.private'   # must be false
 ```
 
-Expected result: all three confirmation lines. Run the first inside each repo's checkout; the latter two from anywhere with an authenticated `gh`. A failure on the second line is a security incident rather than a drifted convention — the skill-content repo's privacy is what gates the registry's access-controlled content, and this record's Invariants section states it is binding from day one.
+A `false` on the second is a security incident rather than a drifted convention — the skill-content repo's privacy is what gates the registry's access-controlled content, and this record's Invariants section states it is binding from day one.
+
+The runner reports this record as unverified. Automating it would require a standing credential with organisation-wide reach, which [0014-registry-collision-detection](0014-registry-collision-detection.md)'s Contents-read scoping was deliberately kept narrow to avoid.
 
 ## Precedence
 

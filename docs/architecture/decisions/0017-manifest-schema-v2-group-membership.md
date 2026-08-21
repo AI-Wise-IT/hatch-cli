@@ -58,6 +58,8 @@ No new invariant beyond what [0010-manifest-schema-migrations](0010-manifest-sch
 
 ## Machine Check
 
+- **context:** cli-repo
+
 Run from the `hatch-cli` checkout. This record's durable, checkable fact is the registered migration, not a manifest's current version number — the chain has moved past 2, so no live manifest sits there.
 
 ```bash

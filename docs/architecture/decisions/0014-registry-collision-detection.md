@@ -70,12 +70,16 @@ The harness-registry's reserved-code set only ever grows ([0001](0001-harness-su
 
 ## Machine Check
 
-```bash
-grep -rln "hatchcli" ../hatch-skills/.github/workflows/*.yml
-grep -rEln "harness-registry|resolution" .github/workflows/*.yml
-```
+- **context:** review-only
+- **reason:** this record decides that a two-sided check exists and where each side runs. Whether a job in either repository's workflow actually invokes the collision check — rather than merely mentioning a string that looks like it does — is a judgment about what the workflow means, and a grep for a name in a YAML file passes whether or not the job it names is wired to anything.
 
-Expected result (first command run from the hatch-cli checkout, second from the same): hatch-skills' CI workflow shows a job installing/invoking `@ai-wise/hatchcli`'s collision check; hatch-cli's CI workflow shows a separate job path-filtered to the harness registry/resolution code, fetching the hatch-skills repo and invoking the same check. Absence of either indicates the two-sided check isn't wired up as decided.
+A reviewer establishes it by reading both workflow files and confirming:
+
+- `hatch-skills`' CI carries a job that installs `@ai-wise/hatchcli` and invokes its collision check against the registry checkout;
+- `hatch-cli`'s CI carries a separate job, gated on harness-registry/resolution changes, that fetches `hatch-skills` and invokes the same check;
+- both jobs are required status checks on their repository's `main`.
+
+The predicate those jobs evaluate is [0024-registry-collision-predicate](0024-registry-collision-predicate.md)'s, and is reviewed there.
 
 ## Precedence
 

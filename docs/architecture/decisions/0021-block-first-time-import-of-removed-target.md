@@ -59,16 +59,20 @@ The same review also raised whether a *group* with a removed *member* should blo
 
 ## Machine Check
 
-```bash
-# From an initialized project whose manifest records `testProject: true`,
-# and that has never imported "_removed-fixture":
-node dist/index.js import _removed-fixture
-echo "exit=$?"
+- **context:** review-only
+- **reason:** establishing this record needs a built CLI and a project prepared to a specific state — initialized, recording `testProject: true`, and having never imported `_removed-fixture`. Nothing in a checkout carries that state, and a command that merely greps the refusal path passes whether or not the refusal actually fires.
+
+A reviewer establishes it by running, from such a project:
+
+```text
+node dist/index.js import _removed-fixture; echo "exit=$?"
 ```
 
-Expected result: exit `1`, output naming `_removed-fixture` as removed and stating nothing was changed; no `.claude/skills/_removed-fixture` (or equivalent harness folder) created; `hatch.manifest.json` unchanged.
+and confirming exit `1`, output naming `_removed-fixture` as removed and stating nothing was changed, no `.claude/skills/_removed-fixture` (or equivalent harness folder) created, and `hatch.manifest.json` unchanged.
 
-The opt-in is part of the precondition because `_removed-fixture` is testing content ([0027-testing-skill-convention](0027-testing-skill-convention.md)): in an ordinary project the same command reports the registry's not-found wording instead, revealing nothing about the fixture at all. That is 0027 working as decided, not this record failing. The project must already be initialized, since `hatch import` requires a manifest ([0015-import-harness-selection-flag](0015-import-harness-selection-flag.md)).
+The `testProject` opt-in is part of the precondition because `_removed-fixture` is testing content ([0027-testing-skill-convention](0027-testing-skill-convention.md)): in an ordinary project the same command reports the registry's not-found wording instead, revealing nothing about the fixture at all. That is 0027 working as decided, not this record failing. The project must already be initialized, since `hatch import` requires a manifest ([0015-import-harness-selection-flag](0015-import-harness-selection-flag.md)).
+
+The behavior itself is covered by unit tests in `src/commands/import.test.ts`; what no command establishes is that a real first-time import in a real project is refused end to end.
 
 ## Precedence
 

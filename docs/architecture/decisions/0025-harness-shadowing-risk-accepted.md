@@ -57,11 +57,12 @@ None. This record accepts a risk rather than establishing an enforced guarantee 
 
 ## Machine Check
 
-```bash
-grep -rn "shadow" src/registry/collision-check.ts
-```
+- **context:** review-only
+- **reason:** this record accepts a risk rather than establishing a mechanism, so there is nothing whose presence a command can confirm. Grepping the collision-check module for "shadow" and finding nothing is satisfied equally by a module that deliberately omits shadowing detection and by one that implements it under any other name.
 
-Expected result: no match — confirms no shadowing-detection logic was added to the predicate, consistent with this record.
+A reviewer establishes it by confirming that no check in either repository compares `resolveSkillFolderName`'s resolution behavior before and after a harness-registry change, and that neither the CLI's collision check ([0024-registry-collision-predicate](0024-registry-collision-predicate.md)) nor any registry-side job flags a top-level name merely for ending in a reserved harness code.
+
+A future change that *adds* such detection does not fail this record — it supersedes it.
 
 ## Precedence
 

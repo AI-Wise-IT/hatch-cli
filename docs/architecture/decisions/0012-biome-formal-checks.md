@@ -48,6 +48,8 @@ None. Lint/format/type-check tooling is entirely internal — no external depend
 
 ## Machine Check
 
+- **context:** cli-repo
+
 ```bash
 test -f biome.json && grep -q '"strict": true' tsconfig.json
 ```

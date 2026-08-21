@@ -55,6 +55,8 @@ None. This record's choices (TypeScript/Node runtime, shelling out to system `gi
 
 ## Machine Check
 
+- **context:** cli-repo
+
 ```bash
 test -f package.json && grep -q '"typescript"' package.json && ! test -f go.mod && ! test -f Cargo.toml
 ```

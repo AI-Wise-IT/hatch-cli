@@ -76,18 +76,22 @@ UC-3 AF-4 ("deprecated or removed skill/group detected") already assumed "remove
 
 ## Invariants
 
-- **MUST NOT delete or rename a top-level registry folder once published, except a testing skill ([0027](0027-testing-skill-convention.md)).** Becomes irreversible once: a real project has imported (or could import) that name — deleting or renaming it would break any future re-import and retroactively invalidate [0014-registry-collision-detection](0014-registry-collision-detection.md)'s collision guarantee. Enforcement mechanism: `hatch-skills`' CI `name-permanence-check` job (required status check). Current mode: **advisory** (`NAME_PERMANENCE_ENFORCEMENT=warn`) as of 2026-08-12 (hatch-skills PR #15) — the check had been accidentally blocking since Batch 2, closing the pre-launch cleanup window before any real cutover was named; downgraded to warn-only on discovery so dev/test-fixture cleanup stays possible. Move back to blocking at the actual pre-launch hardening cutover. The testing-skill exemption is enforcement-mode-independent: a marked folder is skipped by this check in warn and block mode alike.
-- **MUST implement "removed" as a metadata flag, never a folder deletion.** Becomes irreversible once: the same trigger as above — this is the release valve that makes the permanence rule survivable (a mistaken or deprecated publish gets flagged, not deleted). Enforcement mechanism: the same `name-permanence-check` job — a `removed: true` folder that got deleted instead of flagged would itself be caught by that check. Current mode: advisory, same as above.
+- **MUST NOT delete or rename a top-level registry folder once published, except a testing skill ([0027](0027-testing-skill-convention.md)).** Becomes irreversible once: a real project has imported (or could import) that name — deleting or renaming it would break any future re-import and retroactively invalidate [0014-registry-collision-detection](0014-registry-collision-detection.md)'s collision guarantee. Enforcement mechanism: `hatch-skills`' CI `name-permanence-check` job (required status check, `NAME_PERMANENCE_ENFORCEMENT=block`), and `hatch-skills`' CI `decision-records` job, which executes this record's Machine Check against the registry checkout on every pull request and fails on any published top-level folder deleted since `11a7618`. Current mode: **blocking** in both. The testing-skill exemption is enforcement-mode-independent: a marked folder is skipped by both checks, and may be renamed or deleted through an ordinary pull request.
+- **MUST implement "removed" as a metadata flag, never a folder deletion.** Becomes irreversible once: the same trigger as above — this is the release valve that makes the permanence rule survivable (a mistaken or deprecated publish gets flagged, not deleted). Enforcement mechanism: the same `name-permanence-check` job — a `removed: true` folder that got deleted instead of flagged would itself be caught by that check. Current mode: blocking, same as above.
 
 ## Machine Check
 
-Run this in the `hatch-skills` checkout. It inspects the registry's own history, so in `hatch-cli` it returns no output and reads as a pass while having verified nothing.
+- **context:** registry-checkout
+
+It inspects the registry's own history, which is why this check declares that context rather than the CLI repo's.
 
 ```bash
-git log 11a7618..HEAD --diff-filter=D --name-only --pretty=format: -- '*/skill.json' | grep -v '^_' | sort -u
+deleted=$(git log 11a7618..HEAD --diff-filter=D --name-only --pretty=format: -- '*/skill.json' | grep -v '^_' | sort -u)
+if [ -n "$deleted" ]; then echo "$deleted"; exit 1; fi
+echo "no published top-level folder deleted since 11a7618: correct"
 ```
 
-Expected result: no output. Any name printed is a top-level folder whose deletion violated this record.
+Expected result: the confirmation line, exit 0. Any name printed is a top-level folder whose deletion violated this record.
 
 The range starts at `11a7618` (`hatch-skills` PR #18, reverting PR #17) — the one sanctioned retraction of non-testing content in the repo's history, made while this rule was advisory and no project could yet depend on the names involved. Excluding it by commit rather than by name keeps this record free of an allowlist that would need editing to stay accurate.
 
