@@ -77,8 +77,10 @@ The decision itself was settled with the developer in the `add-registry-listing`
 ## Agent Rules
 
 - MUST discover registry content by a live walk over the contents API — one non-recursive root call, then one `skill.json` per surviving candidate and one `SKILL.md` per surviving plain skill — MUST NOT introduce an index file, a second retrieval mechanism, or a between-run cache of fetched registry content.
-- MUST apply the caller's name filter and the `_`-prefix testing exclusion to candidate names before any per-entry fetch.
+- MUST apply the caller's name filter to candidate names before any per-entry fetch.
+- MUST apply the `_`-prefix testing exclusion to candidate names before any per-entry fetch in a project that does not record `testProject: true` — and MUST NOT apply it in one that does, where testing content lists like any other entry.
 - MUST read a plain skill's description from its `SKILL.md` frontmatter — MUST NOT read a plain skill's description from its `skill.json`.
+- MUST NOT author a `description` field in a plain skill's `skill.json` — a skill's description lives in its `SKILL.md` frontmatter and nowhere else, and the registry's content check rejects the duplicate copy rather than tolerating it unread.
 - MUST read a group's description from the `description` field on the group's own `skill.json` — MUST NOT fetch a group's `SKILL.md`, and MUST NOT derive a group's description from its members' descriptions.
 - MUST give every group folder's `skill.json` a non-empty string `description`, and every plain skill folder's `SKILL.md` frontmatter a non-empty `description`.
 - MUST list an entry whose description cannot be read, showing the description as absent — MUST NOT treat a missing description as an error and MUST NOT omit the entry for it.

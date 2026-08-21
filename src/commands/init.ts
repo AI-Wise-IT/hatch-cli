@@ -23,9 +23,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { resolveToken, writeCredentials } from "../auth/credentials.js";
-import { validateGitHubToken } from "../auth/github-token.js";
-import { promptHidden } from "../cli/prompt.js";
+import { authenticate } from "../auth/authenticate.js";
 import { getHarnessDefinition, isKnownHarness } from "../harness-registry.js";
 import { migrateManifest } from "../manifest-migrations/index.js";
 import { isTestProject } from "../project/test-project.js";
@@ -96,12 +94,6 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   return { targetPath: resolve(targetPath), harnesses, testProject };
 }
 
-function isNetworkFailure(reason: string | undefined): boolean {
-  return (
-    typeof reason === "string" && reason.startsWith("could not reach GitHub")
-  );
-}
-
 function extractSkillVersion(files: Map<string, string>): string {
   const raw = files.get("skill.json");
   if (!raw) {
@@ -154,35 +146,16 @@ export async function runInit(argv: string[]): Promise<number> {
 
   const sortedHarnesses = [...harnesses].sort();
 
-  // Authenticate before any filesystem change; reuse an existing session if
-  // one already resolves rather than re-prompting.
-  let token = resolveToken();
-  if (!token) {
-    const candidate = (
-      await promptHidden("Registry personal access token: ")
-    ).trim();
-    if (!candidate) {
-      console.error("hatch init: no token provided — nothing was created.");
-      return 1;
-    }
-
-    const validation = await validateGitHubToken(candidate);
-    if (!validation.valid) {
-      if (isNetworkFailure(validation.reason)) {
-        console.error(
-          `hatch init: registry unreachable (${validation.reason}) — nothing was created.`,
-        );
-      } else {
-        console.error(
-          `hatch init: invalid password (${validation.reason}) — nothing was created.`,
-        );
-      }
-      return 1;
-    }
-
-    writeCredentials(candidate);
-    token = candidate;
+  // Authenticate before any filesystem change, through the one shared step
+  // every registry-reading command uses (ADR-0005): it reuses an already
+  // resolved session rather than re-prompting, and validates and persists a
+  // prompted token itself.
+  const authResult = await authenticate();
+  if ("error" in authResult) {
+    console.error(`hatch init: ${authResult.error} — nothing was created.`);
+    return 1;
   }
+  const token = authResult.token;
 
   // Resolved before creating anything on disk, so a fetch failure never
   // leaves a partial placement behind.

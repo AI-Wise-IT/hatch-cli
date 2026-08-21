@@ -14,9 +14,9 @@ Both the skill-content registry repo and the Hatch CLI repo are hosted on GitHub
 
 ### Visibility correction (post-acceptance)
 
-Both repos were originally recorded as private. During `build-infrastructure-batch`'s scaffolding of the Hatch CLI repo (`AI-Wise-IT/hatch-cli`, on the org's Free plan), applying [0008-trunk-based-branch-protection](0008-trunk-based-branch-protection.md) failed: both the classic branch-protection API and the newer Rulesets API returned `403 Upgrade to GitHub Pro or make this repository public` — GitHub restricts branch protection on private repos to paid plans. The developer was offered three ways to resolve the conflict between this record and ADR-0008 — upgrade the org to a paid plan, make the Hatch CLI repo public, or skip branch protection — and chose to make the Hatch CLI repo public.
+Both repos were originally recorded as private. During `build-infrastructure-batch`'s scaffolding of the Hatch CLI repo (`AI-Wise-IT/hatch-cli`), applying [0008-trunk-based-branch-protection](0008-trunk-based-branch-protection.md) failed: on the org's plan at the time, both the classic branch-protection API and the newer Rulesets API returned `403 Upgrade to GitHub Pro or make this repository public`. The developer was offered three ways to resolve the conflict between this record and ADR-0008 — upgrade the org to a paid plan, make the Hatch CLI repo public, or skip branch protection — and chose to make the Hatch CLI repo public.
 
-This is safe specifically for the CLI repo because [0006-npm-public-distribution](0006-npm-public-distribution.md) already established that its source contains no secrets and no private skill content, and ships publicly via npm regardless of the GitHub repo's own visibility — the CLI repo's visibility was never a security boundary, only an initial default that turned out to be unnecessary and, on this plan, actively blocking. The skill-content repo has no equivalent reasoning and remains private.
+That constraint no longer binds: the org is on a paid plan, and a private skill-content repo now carries branch protection with its full set of required checks. The CLI repo stays public regardless, on the reasoning that outlives the billing question — [0006-npm-public-distribution](0006-npm-public-distribution.md) established that its source contains no secrets and no private skill content and ships publicly via npm whatever the GitHub repo's visibility, so that visibility is not a security boundary and never was. Public is now the deliberate position rather than a workaround: the package is world-readable either way, and a public repo can take issues and pull requests where a private one cannot. The skill-content repo has no equivalent reasoning and remains private, where its privacy *is* load-bearing.
 
 ## Context
 
@@ -38,7 +38,8 @@ For the skill-content repo, this is not a genuinely open choice: [0001-harness-s
 
 - The GitHub personal access token used for registry auth (see [0003-registry-github-tarball-fetch](0003-registry-github-tarball-fetch.md) and the upcoming Authentication cluster) can plausibly be scoped to cover both repos if that proves convenient — an implementation detail for that later decision, not fixed here.
 - No self-hosted git infrastructure exists or needs maintaining.
-- The Hatch CLI repo's public visibility is what makes [0008-trunk-based-branch-protection](0008-trunk-based-branch-protection.md) usable on the org's current (Free) GitHub plan; the skill-content repo, if it also needs branch protection, will hit the same plan constraint while it stays private and needs its own resolution when that batch is built.
+- Both repos carry [0008-trunk-based-branch-protection](0008-trunk-based-branch-protection.md)'s branch protection on `main`, and the org's paid plan is what allows the skill-content repo to do so while staying private. Its required checks are the registry-side ones the content records establish: `version-check` ([0009](0009-skill-versioning-semver-tags.md)), `name-permanence-check` ([0013](0013-registry-group-structure-and-permanence.md)), `collision-check` ([0014](0014-registry-collision-detection.md)), and the testing-declaration and description checks ([0027](0027-testing-skill-convention.md), [0028](0028-registry-discovery-live-walk.md)).
+- Dropping to a plan without private-repo branch protection would reopen the choice this record's correction section describes, for the skill-content repo rather than the CLI one — its privacy is load-bearing, so making it public is not among the available answers.
 
 ## Agent Rules
 
@@ -54,11 +55,15 @@ None in the sense this section usually means. The skill-content repo's privacy i
 
 ## Machine Check
 
+This record decides two things — that both repos are on GitHub, and that they have opposite visibility — so the check verifies both rather than the host alone.
+
 ```bash
-git remote get-url origin | grep -q "github.com"
+git remote get-url origin | grep -q "github.com" && echo "hosted on GitHub: correct"
+test "$(gh api repos/AI-Wise-IT/hatch-skills --jq '.private')" = "true" && echo "skill-content private: correct"
+test "$(gh api repos/AI-Wise-IT/hatch-cli --jq '.private')" = "false" && echo "CLI repo public: correct"
 ```
 
-Expected result: run inside each repo's checkout; the origin remote URL contains `github.com` in both.
+Expected result: all three confirmation lines. Run the first inside each repo's checkout; the latter two from anywhere with an authenticated `gh`. A failure on the second line is a security incident rather than a drifted convention — the skill-content repo's privacy is what gates the registry's access-controlled content, and this record's Invariants section states it is binding from day one.
 
 ## Precedence
 

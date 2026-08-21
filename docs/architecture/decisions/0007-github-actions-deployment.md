@@ -41,13 +41,13 @@ The developer's stated reasoning for wanting merges gated (see [0008-trunk-based
 ## Trade-offs Accepted
 
 - **Prompt coherence:** high — GitHub Actions workflow YAML is a well-known, well-documented convention.
-- **Failure surface:** the skill-content repo's check needs no secrets at all (matches UC-5 exactly); the Hatch CLI release workflow depends on one repo secret (`NPM_TOKEN`) — a single credential to rotate if it's ever compromised.
+- **Failure surface:** the skill-content repo's check needs no secrets at all (matches UC-5 exactly), and the Hatch CLI release workflow stores no publish credential either — Trusted Publishing mints a short-lived one per run, so there is nothing to rotate or leak. What the release path does depend on is the Trusted Publisher relationship configured on npmjs.com continuing to match the org, repo, and workflow filename: renaming any of the three breaks publishing until the relationship is updated.
 - **Reversibility:** workflows are just YAML files inside each repo, trivially edited or replaced later.
 - **Operational simplicity:** no infrastructure beyond what GitHub already provides; tag-triggered release avoids needing a version-bump-detection tool.
 
 ## Consequences
 
-- The `hatchcli` npm package must have a Trusted Publisher configured on npmjs.com (org `AI-Wise-IT`, repo `hatch-cli`, workflow filename `release.yml`) before the release workflow can publish — this must be done once, manually, after the package's first (also manual) publish.
+- The `@ai-wise/hatchcli` npm package must have a Trusted Publisher configured on npmjs.com (org `AI-Wise-IT`, repo `hatch-cli`, workflow filename `release.yml`) before the release workflow can publish — this must be done once, manually, after the package's first (also manual) publish.
 - The release workflow needs `permissions: id-token: write` and a runner with npm ≥11.5.1 / Node ≥22.14.0; no `NPM_TOKEN` or other publish secret is stored in the repo.
 - The skill-content repo's collision-check workflow becomes a required status check under [0008-trunk-based-branch-protection](0008-trunk-based-branch-protection.md) — this record defines what the check does, that record defines how it blocks merges.
 - The Hatch CLI repo's test/formal-check workflow step is a placeholder pointing at whatever the Testing + Formal checks cluster settles — this record does not itself define those commands.

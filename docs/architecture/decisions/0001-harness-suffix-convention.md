@@ -46,9 +46,9 @@ The three harnesses in scope today are Claude, Codex, and Cursor, with abbreviat
 
 ## Consequences
 
-- **Required for the MVP, not yet built:** a canonical harness registry — a single source of truth mapping each reserved code to its harness — does not exist yet anywhere in this project. `hatch import`'s resolution logic, the registry publish lint, and any registry-browsing tooling all depend on reading their reserved-code set from this one place rather than each hardcoding their own copy. Its path is `src/harness-registry.json` in the Hatch CLI repo, per [0002-cli-runtime-nodejs](0002-cli-runtime-nodejs.md), which settled the CLI's language and repo layout. Treat standing this registry up as part of the initial CLI build, not an afterthought — every rule below assumes it exists.
+- The canonical harness registry — the single source of truth mapping each reserved code to its harness — lives in the Hatch CLI repo, per [0002-cli-runtime-nodejs](0002-cli-runtime-nodejs.md), which settled the CLI's language and repo layout. It is two files with one job: `src/harness-registry.json` holds the data, and `src/harness-registry.ts` is the only module that reads it, exposing `knownHarnessNames`, `reservedHarnessCodes`, `isKnownHarness`, `getHarnessDefinition`, and `resolveSkillFolderName`. A record naming either path is naming the same registry — the `.json` when it means the data, the `.ts` when it means the accessor. `hatch import`'s resolution logic, the collision check, and any registry-browsing tooling all reach the reserved-code set through that module rather than hardcoding their own copy.
 - `hatch import`'s resolution logic must implement "prefer `<name>-<H-code>/`, else `<name>/`, else unavailable" for its target harness, reading `<H-code>` from the harness registry, and must strip the harness-code suffix at deployment time.
-- The registry's "no duplicate destination path" publish lint must be extended to flag any skill name ending in a code from the harness registry's reserved set, for human review before publishing, whether or not it's an intentional variant.
+- No lint flags a skill name merely for ending in a reserved code. [0025-harness-shadowing-risk-accepted](0025-harness-shadowing-risk-accepted.md) declines that check outright: a single snapshot cannot distinguish a coincidental suffix from a deliberate family variant, so the check would permanently false-positive on legitimate pairs already published. The residual misresolution risk is accepted rather than detected — see that record for the conditions under which it should be revisited.
 - Tessl will grade and list each harness-suffixed family member as a fully independent registry entry with no merged identity — accepted and confirmed by the developer.
 - How Hatch's own project-level manifest records which harness(es) a project uses is now settled by [0015-import-harness-selection-flag](0015-import-harness-selection-flag.md) (an explicit, validated `--harness` flag on `hatch init`, the one command that creates the manifest). How a new harness would be onboarded end-to-end remains open for a later decision if needed.
 
@@ -59,7 +59,7 @@ The three harnesses in scope today are Claude, Codex, and Cursor, with abbreviat
 - MUST NOT add a new harness code by editing this record — new codes are added to the harness registry; this record governs the mechanism, not the current membership of the set.
 - MUST NOT rely on metadata or frontmatter to declare a skill's target harness — the folder name is the sole source of truth.
 - `hatch import`'s resolution logic MUST read the current reserved codes from the harness registry at run time (never a hardcoded copy), prefer the suffixed variant over the unsuffixed default for its target harness, and MUST strip the harness-code suffix on deploy.
-- The registry's publish lint MUST read the same harness registry and flag any skill name ending in one of its reserved codes for human review before publishing.
+- MUST NOT build a lint that flags a skill name for ending in a reserved harness code — [0025-harness-shadowing-risk-accepted](0025-harness-shadowing-risk-accepted.md) rejects it as unsound against real registry content.
 
 ## Invariants
 
@@ -68,14 +68,15 @@ The three harnesses in scope today are Claude, Codex, and Cursor, with abbreviat
 
 ## Machine Check
 
-No automated registry tooling exists yet; this is the smallest concrete manual check until one does. It deliberately reads the reserved codes from the harness registry rather than hardcoding them, so the check stays correct as the registry grows.
+Run from the `hatch-cli` checkout. What this record still asserts and a machine can still verify is the single-source-of-truth rule: every consumer reaches the reserved codes through the harness registry module, and no module carries its own copy.
 
 ```bash
-CODES=$(<read the harness registry's reserved codes, joined with "|">)
-find skills -maxdepth 1 -type d -regextype posix-extended -regex ".*-($CODES)$"
+grep -rnE "[\"'](cld|cdx|csr)[\"']" src/ --include=*.ts | grep -v "^src/harness-registry" | grep -v "\.test\.ts" || echo "no hardcoded harness codes: correct"
 ```
 
-Expected result: every path listed is a deliberate harness-specific variant, confirmed against this record. Any path in the output that is not an intentional variant is a naming collision and must be renamed before publishing — this check fails by producing an unexplained entry, not by a non-zero exit code.
+Expected result: the "no hardcoded harness codes" line. Any path printed is a module holding a literal reserved code instead of reading it from `src/harness-registry.ts`, which is what this record forbids — test files are excluded because a test asserting resolution behavior legitimately names the codes it is testing.
+
+The codes in the pattern are today's reserved set and must be extended by hand when the registry grows; this check verifies that consumers read from the registry, not that the registry's own membership is correct. Name-shape checking is deliberately absent — see Consequences and [0025-harness-shadowing-risk-accepted](0025-harness-shadowing-risk-accepted.md).
 
 ## Precedence
 
@@ -83,4 +84,8 @@ Expected result: every path listed is a deliberate harness-specific variant, con
 - [0013-registry-group-structure-and-permanence](0013-registry-group-structure-and-permanence.md) extends this record: group internal structure and name-permanence policy, both left open here, are settled there without contradicting this record.
 - [0014-registry-collision-detection](0014-registry-collision-detection.md) implements a required check against this record's resolution algorithm and harness registry.
 - [0015-import-harness-selection-flag](0015-import-harness-selection-flag.md) resolves this record's own deferred open item on manifest-level harness recording.
+- [0024-registry-collision-predicate](0024-registry-collision-predicate.md) settles the concrete predicate that check evaluates, and establishes that `resolveSkillFolderName` always deploys under the literal name it was queried with.
+- [0025-harness-shadowing-risk-accepted](0025-harness-shadowing-risk-accepted.md) governs the suffix-shape lint this record once required: it is rejected as unsound, and the underlying misresolution risk is accepted rather than detected.
+- [0027-testing-skill-convention](0027-testing-skill-convention.md) reserves a leading `_` in the same flat namespace this record governs, for content that is exempt from name permanence and never importable.
+- [0028-registry-discovery-live-walk](0028-registry-discovery-live-walk.md) reads this record's reserved codes to decide when a `<base>-<code>` folder is folded into `<base>` in a listing.
 - No known conflicting decision records.

@@ -12,7 +12,21 @@
 
 `hatch login` accepts the registry's GitHub personal access token directly as "the personal password" (no separate password unlocking a stored token) and persists it to `~/.hatch/credentials.json` — a home-directory path, never inside any project's own repo tree — with restrictive file permissions.
 
-Every command requiring registry access resolves the credential with this precedence: check the `HATCH_TOKEN` environment variable first; if unset, read `~/.hatch/credentials.json`. There is no OS keychain integration and no logout/session-invalidation command in this MVP.
+Every command requiring registry access resolves the credential through one shared step (`src/auth/authenticate.ts`), in three tiers:
+
+1. the `HATCH_TOKEN` environment variable;
+2. `~/.hatch/credentials.json`, if the variable is unset;
+3. an interactive prompt for the token, if neither resolves.
+
+A token supplied at the prompt is validated against GitHub and, on success, persisted to `~/.hatch/credentials.json` exactly as `hatch login` would. `hatch login` is therefore the *explicit* way to seed a credential, not the only one: a first run on a fresh desktop asks once, then behaves like every run after it. A token that fails validation is never persisted, and a failure to reach GitHub at all is reported as the registry being unreachable rather than as a bad credential.
+
+The prompt never echoes the token, and reads stdin in whichever of three modes it finds:
+
+- **A TTY:** raw-mode keystroke reading with terminal echo suppressed, the convention `sudo` and `npm login` use. Ctrl-C resolves as no token rather than force-exiting the process, so the command exits cleanly with a non-zero code instead of racing an in-flight fetch on the way out.
+- **A pipe:** the first line of stdin is taken as the token. `echo "$TOKEN" | hatch import <name>` is a supported way for a non-interactive caller that holds a credential to supply it.
+- **Neither, with stdin at EOF:** the token resolves empty, reported as "no token provided" with a non-zero exit.
+
+There is no OS keychain integration and no logout/session-invalidation command in this MVP.
 
 ## Context
 
@@ -34,35 +48,45 @@ The developer confirmed directly, while this cluster was being settled, that Cla
 ## Trade-offs Accepted
 
 - **Prompt coherence:** high — one precedence rule ("env var, else file") an agent can state and apply without per-OS branching or keychain-availability checks.
-- **Failure surface:** the credentials file is plaintext on the user's own machine, the same trust boundary as `~/.ssh` — accepted for a personal-use tool. The cloud-reliable path now depends on an external assumption — that the harness in use (Claude Code, confirmed; Codex, expected but not yet independently verified) provides persistent, session-injected environment variables — which is a real dependency this record does not control.
+- **Failure surface:** the credentials file is plaintext on the user's own machine, the same trust boundary as `~/.ssh` — accepted for a personal-use tool. The cloud-reliable path depends on an external assumption — that the harness in use (Claude Code, confirmed; Codex, expected but not yet independently verified) provides persistent, session-injected environment variables — which is a real dependency this record does not control. The "never wait indefinitely" rule holds for a closed stdin, which resolves empty at EOF; a caller whose stdin stays open without ever delivering a line still blocks, because nothing imposes a timeout. Accepted: that is a misconfigured caller rather than a normal one, and the environment variable is the path a correctly-configured non-interactive caller uses.
 - **Reversibility:** a keychain backend could be added later as an additional fallback without breaking the precedence contract, since the env var would still be checked first.
 - **Operational simplicity:** one code path across desktop and cloud; the setup cost shifts to a one-time, per-harness secret configuration that lives outside Hatch's own scope entirely.
 
 ## Consequences
 
-- Hatch CLI's own responsibility ends at the env var/file precedence check. It has no mechanism of its own to persist a secret into a freshly created ephemeral sandbox — that is delegated entirely to the harness's own secret-injection feature (e.g. Claude Code project/global settings, Codex's equivalent).
+- Hatch CLI's own responsibility ends at resolving a credential from these three tiers. It has no mechanism of its own to persist a secret into a freshly created ephemeral sandbox — that is delegated entirely to the harness's own secret-injection feature (e.g. Claude Code project/global settings, Codex's equivalent).
+- The prompt tier is what makes a first desktop run work with no prior setup; it does not soften the cloud story. A cloud-agent sandbox has no interactive terminal, so `HATCH_TOKEN` remains the only reliable path there, and the prompt sits last in the precedence precisely so a correctly-configured automated setup never silently falls into it.
+- Every command needing registry access calls the one shared step and wraps the error string it returns in that command's own prefix and suffix — the step returns an unprefixed reason so each command keeps its own reporting conventions. `hatch login` is the deliberate exception: it always prompts, since re-using an already-resolved session would make the command a no-op.
 - The developer must configure `HATCH_TOKEN` as a persisted secret in each harness's own settings, once per harness, as follow-up setup work outside Hatch CLI's own build. If Codex turns out not to offer an equivalent to Claude Code's mechanism, this record's cloud-side assumption needs revisiting.
 - `~/.hatch/credentials.json` must never be located inside a project's own repo tree, on any environment.
 - No logout command exists in this MVP; rotating the token means overwriting the file (desktop) or updating the harness-level secret (cloud) — there is no in-CLI invalidation path.
 
 ## Agent Rules
 
-- MUST check the `HATCH_TOKEN` environment variable first when resolving the registry credential; MUST only read `~/.hatch/credentials.json` if it is unset.
-- MUST write `hatch login`'s persisted credential to a home-directory path (`~/.hatch/credentials.json`), MUST NOT write it inside any target project's repo tree.
+- MUST resolve the registry credential in this order: `HATCH_TOKEN`, then `~/.hatch/credentials.json` if the variable is unset, then an interactive prompt if neither resolves.
+- MUST resolve that credential through the one shared `authenticate()` step — MUST NOT reimplement the precedence, the prompt, or the persistence inside a command module. `hatch login`, which always prompts by design, is the one command outside this step.
+- MUST validate a prompted token against GitHub before persisting it, and MUST NOT persist one that fails validation.
+- MUST report a failure to reach GitHub as the registry being unreachable, never as an invalid credential.
+- MUST write a persisted credential to a home-directory path (`~/.hatch/credentials.json`), from any command that persists one; MUST NOT write it inside any target project's repo tree.
+- MUST NOT echo a token on any stdin mode.
+- MUST exit with "no token provided" and a non-zero code when no token resolves — MUST NOT wait indefinitely for input that is not coming.
 - MUST NOT implement a logout/session-invalidation command in this MVP.
 - MUST NOT introduce OS keychain integration without superseding this record.
 
 ## Invariants
 
-- **MUST check the `HATCH_TOKEN` environment variable first, falling back to `~/.hatch/credentials.json`.** Becomes irreversible once: any real developer or CI pipeline has configured `HATCH_TOKEN`, or come to rely on the file fallback — renaming the variable or reordering precedence would silently break existing automated setups rather than failing loudly. Enforcement mechanism: none — an unenforced convention in the CLI's credential-resolution code. Current mode: not-yet-built.
+- **The credential-resolution order: `HATCH_TOKEN`, then `~/.hatch/credentials.json`, then an interactive prompt.** Becomes irreversible once: any real developer or CI pipeline has configured `HATCH_TOKEN`, or come to rely on the file fallback — renaming the variable or reordering precedence would silently break existing automated setups rather than failing loudly. The prompt's position last is part of the invariant, not an implementation detail: promoting it above either other tier would turn a configured automated setup into one that blocks for input. Enforcement mechanism: none — an unenforced convention in the CLI's credential-resolution code. Current mode: not-yet-built.
 
 ## Machine Check
 
 ```bash
-grep -rn "process.env.HATCH_TOKEN" src/ && grep -rn "hatch/credentials.json" src/
+grep -q "HATCH_TOKEN" src/auth/credentials.ts && grep -q "credentials.json" src/auth/credentials.ts && grep -q "promptHidden" src/auth/authenticate.ts && echo "three tiers present"
+grep -rln "writeCredentials\|resolveToken" src/ --include=*.ts | grep -v "\.test\.ts" | grep -v "^src/auth/"
 ```
 
-Expected result: both patterns are found in the CLI's auth-resolution module, confirming the env-var-first, file-fallback precedence is implemented as one code path. Absence of either indicates the precedence isn't wired up as decided.
+Expected result: the first command prints `three tiers present` — all three tiers exist, and the env/file pair lives in one module rather than being scattered.
+
+The second lists every command module that touches credential resolution outside the shared step. It must print exactly `src/commands/login.ts`, the one sanctioned exception. Any other path is a command that has grown its own copy of the precedence — the drift the shared step exists to prevent, and what this record's second Agent Rule forbids.
 
 ## Precedence
 

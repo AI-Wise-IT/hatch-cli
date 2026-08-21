@@ -12,6 +12,8 @@
 
 Every top-level registry folder's `skill.json` carries a mandatory boolean `testing` field. Real content declares `"testing": false`; content that exists only to exercise the CLI declares `"testing": true`. The registry's CI rejects a folder that omits the field or gives it a non-boolean value, so nothing enters the registry unclassified.
 
+A top-level folder carrying no `skill.json` at all is not registry content but repository infrastructure — `docs/`, `scripts/` and the README are outside this rule, and outside every other rule in this project that speaks of a top-level registry folder.
+
 A folder is a **testing skill** when its top-level name begins with `_` **and** its `skill.json` declares `"testing": true`. The two markers must agree: CI rejects a `_`-prefixed folder declaring `false`, and a folder declaring `true` without the prefix. The leading `_` is reserved — no real, importable skill or group may use it. The declaration binds top-level folders only; a group's nested member has no `skill.json` of its own and inherits its group's classification.
 
 Three rules follow.

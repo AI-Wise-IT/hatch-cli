@@ -70,11 +70,13 @@ Surfaced directly to the developer rather than guessed, mirroring the standing p
 
 ## Machine Check
 
+Run from the `hatch-cli` checkout. This record's distinctive rule is that `pin` shares [0018](0018-manifest-content-hash-local-edit-detection.md)'s migration rather than claiming a schema version of its own, so what a machine can check is that exactly one migration is keyed `2`.
+
 ```bash
-grep -n '"pin"' hatch.manifest.json
+test "$(grep -cE '^[[:space:]]+2: \(manifest\) => manifest,$' src/manifest-migrations/index.ts)" = "1" && echo "one migration keyed 2: correct"
 ```
 
-Expected result: a `hatch.manifest.json` entry for a skill imported with `@<version>` shows `"pin": {"type": "exact", "value": "<version>"}`; one imported with `@^<version>` shows `"pin": {"type": "range", "value": "<version>"}`; an unpinned entry, or one cleared via `@latest`, has no `pin` field.
+Expected result: the confirmation line. A count of `0` means the shared v2->v3 migration is gone; anything above `1` means `pin` grew a competing schema bump of its own, which this record's first Agent Rule forbids.
 
 ## Precedence
 
