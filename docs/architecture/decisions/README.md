@@ -106,26 +106,37 @@ to verify it.
 
 ### Enforcement
 
-Two checks run on every pull request, in both repositories, and block a failure:
+One status check, `decision-records`, runs on every pull request in both repositories and
+blocks a failure:
 
-| Check | Runs in | Does |
-|---|---|---|
-| `decision-records` | `hatch-cli` and `hatch-skills` | Verifies the whole record set conforms, then executes every check whose context is executable in that repository and reports per record: passed, failed, unverified (with its reason), or skipped as superseded |
-| `decision-record-immutability` | `hatch-cli` | Compares each record's frozen sections between the merge base and the pull-request head, keyed on the record's status **at the merge base**, and fails an edit to a frozen section of an accepted record |
+| Runs in | Does |
+|---|---|
+| `hatch-cli` and `hatch-skills` | Verifies the whole record set conforms, then executes every check whose declared context is executable in that repository, reporting per record: passed, failed, unverified (with its reason), skipped as superseded, or deferred to the other repository's run |
+
+In `hatch-cli` that job carries one further step. It compares each record's frozen
+sections between the pull request's merge base and its head, keyed on the record's status
+**at the merge base**, and fails an edit to a frozen section of an accepted record. It
+runs only there, because that is where the records live, and only on a pull request,
+because a push to `main` has no merge base to compare against.
 
 Conformance is evaluated across the whole record set, not only the records a pull request
 touches, so a record cannot drift out of conformance without a change that names it. A
 check that cannot be located, parsed, or executed is a failure — never a silent skip —
 so a record dropping out of coverage is visible.
 
-Both checks are blocking from the moment they land. They protect the integrity of the
-decision record set itself rather than a pre-launch cleanup window, so neither had an
-advisory period.
+The check is blocking from the moment it lands. It protects the integrity of the decision
+record set itself rather than a pre-launch cleanup window, so it had no advisory period.
 
-Run the whole thing locally with:
+Run the conformance check and every machine check locally with:
 
 ```bash
-node scripts/adr/check.mjs
+node scripts/adr/check.mjs --registry ../hatch-skills
+```
+
+Run the immutability comparison against whatever you branched from:
+
+```bash
+node scripts/adr/check-immutability.mjs --base main
 ```
 
 ## Index
