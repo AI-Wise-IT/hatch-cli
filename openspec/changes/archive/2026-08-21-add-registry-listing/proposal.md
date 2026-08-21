@@ -55,8 +55,8 @@ None. `testing-skill-convention`'s requirements are about what marks testing con
 
 **Out of scope**
 - JSON or otherwise scriptable output. `intake/product-requirements.md` lists scriptable output as a permanent No; human-readable text is what this command prints.
-- Any per-version view — listing a name's published tags, or showing an older version's description. Recorded as the unfinished proposals [`add-skill-details-command`](../add-skill-details-command/proposal.md) and [`add-group-details-command`](../add-group-details-command/proposal.md).
-- Matching against descriptions rather than names. The filter narrows names, which is the failure that prompted this change — a guessed `prd-elicitor` against a real `prd-elicitation`; meaning-based matching over descriptions is a different feature, recorded as the unfinished proposal [`add-semantic-registry-search`](../add-semantic-registry-search/proposal.md).
+- Any per-version view — listing a name's published tags, or showing an older version's description. Recorded as the unfinished proposals `openspec/changes/add-skill-details-command/proposal.md` and `openspec/changes/add-group-details-command/proposal.md`.
+- Matching against descriptions rather than names. The filter narrows names, which is the failure that prompted this change — a guessed `prd-elicitor` against a real `prd-elicitation`; meaning-based matching over descriptions is a different feature, recorded as the unfinished proposal `openspec/changes/add-semantic-registry-search/proposal.md`.
 - Building the CI-maintained index. Recorded as the escape hatch, deliberately not built.
-- Any bar on what makes a skill's content valid beyond requiring a description to exist. Recorded as the unfinished proposal [`add-skill-content-requirements`](../add-skill-content-requirements/proposal.md).
+- Any bar on what makes a skill's content valid beyond requiring a description to exist. Recorded as the unfinished proposal `openspec/changes/add-skill-content-requirements/proposal.md`.
 - Showing a Tessl grade per entry — still blocked on Tessl grading being usable, per `intake/product-requirements.md`.

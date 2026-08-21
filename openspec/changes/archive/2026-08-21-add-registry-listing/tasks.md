@@ -34,7 +34,7 @@
 
 - [x] 5.1 Add a content check requiring a non-empty string `description` on every group folder's `skill.json`, evaluated across the whole registry rather than only the diff; verify it exits non-zero for an omitted field, an empty string and a non-string value, and zero against the registry's real state once task 4.1 has landed.
 - [x] 5.2 Extend the same check to require a non-empty `description` in every plain skill folder's `SKILL.md` frontmatter; verify it exits non-zero for a folder missing the key and zero against the registry's real state once task 4.2 has landed.
-- [ ] 5.3 Wire the check into `.github/workflows/ci.yml` as a blocking job and add it to `main`'s required status checks; verify via `gh api repos/AI-Wise-IT/hatch-skills/branches/main/protection` that the new context is listed.
+- [x] 5.3 Wire the check into `.github/workflows/ci.yml` as a blocking job and add it to `main`'s required status checks; verify via `gh api repos/AI-Wise-IT/hatch-skills/branches/main/protection` that the new context is listed.
 - [x] 5.4 Document the group `description` field and the skill frontmatter requirement in the registry `README.md`; verify every rule the check now enforces is described, with no rule enforced but undocumented.
 
 ## 6. Architecture decisions and documentation
@@ -49,4 +49,4 @@
 - [x] 7.1 Run lint, typecheck, the full test suite and the build; verify all pass with no skipped tests among those touched.
 - [x] 7.2 Run a manual acceptance-test walkthrough (`cli-acceptance-testing`) against the built CLI: a bare `hatch list`, a filter narrowing to one name, a filter matching nothing, `hatch list` from a directory with no manifest, a run in a `--test-project` project showing fixtures, the same run in an ordinary project not showing them, and a run with credentials lacking registry access; verify every effect by direct observation before opening the PR.
 - [x] 7.3 Verify the command solves the failure that prompted it, by confirming `hatch list prd-elicit` returns `prd-elicitation` against the real registry — the exact name the cloud agent guessed wrong.
-- [ ] 7.4 Update `hatch-usage/SKILL.md` in `hatch-skills` to direct agents to `hatch list` in place of the current instruction that no discovery mechanism exists, once a released CLI carries the command; verify the skill no longer describes the gap anywhere and that its guidance names the released version the command first shipped in.
+- [x] 7.4 Update `hatch-usage/SKILL.md` in `hatch-skills` to direct agents to `hatch list` in place of the current instruction that no discovery mechanism exists, once a released CLI carries the command; verify the skill no longer describes the gap anywhere and that its guidance names the released version the command first shipped in.
