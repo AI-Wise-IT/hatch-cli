@@ -5,7 +5,7 @@ Nothing downstream is written against an assumption the documentation leaves amb
 - [x] 1.1 Connect `hatch-cli` to Greptile Cloud and verify the repository reports as indexed and a pull request on it receives a review
 - [x] 1.2 On a throwaway branch, reference one decision record from `.greptile/files.json` by both a root-relative and a `.greptile/`-relative path, open a pull request, and determine from the review which base resolves; record the answer in design.md's Risks entry
 - [x] 1.3 On the same throwaway pull request, add a rule carrying an `id` and a `scope`, violate it deliberately, and verify the review flags it — establishing that rules are read before twenty-eight are written
-- [ ] 1.4 Connect `hatch-skills`, verify it reports as indexed, and determine which cross-repository mechanism delivers `hatch-cli`'s record text to a review there; record which one worked
+- [x] 1.4 Connect `hatch-skills`, verify it reports as indexed, and determine which cross-repository mechanism delivers `hatch-cli`'s record text to a review there; record which one worked
 - [x] 1.5 Close the throwaway pull request and delete its branch, leaving no configuration behind in either repository
 
 ## 2. Extend the record contract
@@ -37,7 +37,7 @@ Nothing downstream is written against an assumption the documentation leaves amb
 
 ## 6. Configuration in `hatch-skills`
 
-- [ ] 6.1 Create `.greptile/config.json` in `hatch-skills` with rules for the registry-side records and cross-repository context to `hatch-cli` by the mechanism established in 1.4; verify a pull request review there cites a record
+- [x] 6.1 Create `.greptile/config.json` in `hatch-skills` with rules for the registry-side records and cross-repository context to `hatch-cli` by the mechanism established in 1.4; verify a pull request review there cites a record
 - [x] 6.2 Verify no decision record file has been copied into `hatch-skills`, and that its rules reach the records in the repository that owns them
 
 ## 7. Decision records
