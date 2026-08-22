@@ -15,43 +15,68 @@
     {
       "id": "adr-0002-cli-runtime-nodejs",
       "rule": "Enforce the Agent Rules of decision record 0002-cli-runtime-nodejs, supplied as review context. Establish that this change introduces no runtime dependency the record does not permit, and no build or plumbing step outside the recorded toolchain.",
-      "scope": ["package.json", "tsconfig.json", "src/**", "scripts/**"],
+      "scope": [
+        "package.json",
+        "tsconfig.json",
+        "src/**",
+        "scripts/**"
+      ],
       "severity": "high"
     },
     {
       "id": "adr-0003-registry-github-tarball-fetch",
       "rule": "Enforce the Agent Rules of decision record 0003-registry-github-tarball-fetch, supplied as review context. Establish that registry content is still obtained the way that record settles, and that this change adds no second fetch path beside it.",
-      "scope": ["src/registry/fetch.ts", "src/registry/**"],
+      "scope": [
+        "src/registry/fetch.ts",
+        "src/registry/**"
+      ],
       "severity": "high"
     },
     {
       "id": "adr-0004-github-vcs-platform",
       "rule": "Enforce the Agent Rules of decision record 0004-github-vcs-platform, supplied as review context. Establish that this change assumes no version-control host other than the one that record names. Repository visibility itself is live organisation state and is outside a diff review's reach.",
-      "scope": [".github/**", "package.json", "src/registry/**"],
+      "scope": [
+        ".github/**",
+        "package.json",
+        "src/registry/**"
+      ],
       "severity": "medium"
     },
     {
       "id": "adr-0005-auth-token-env-file-precedence",
       "rule": "Enforce the Agent Rules of decision record 0005-auth-token-env-file-precedence, supplied as review context. Establish that this change does not alter the recorded precedence between environment and file credentials, and that no credential is read from a source the record does not name.",
-      "scope": ["src/auth/**", "src/commands/login.ts"],
+      "scope": [
+        "src/auth/**",
+        "src/commands/login.ts"
+      ],
       "severity": "high"
     },
     {
       "id": "adr-0006-npm-public-distribution",
       "rule": "Enforce the Agent Rules of decision record 0006-npm-public-distribution, supplied as review context. Establish that publish configuration and invocation documentation still match what that record settles.",
-      "scope": ["package.json", "README.md", ".github/workflows/**"],
+      "scope": [
+        "package.json",
+        "README.md",
+        ".github/workflows/**"
+      ],
       "severity": "medium"
     },
     {
       "id": "adr-0007-github-actions-deployment",
       "rule": "Enforce the Agent Rules of decision record 0007-github-actions-deployment, supplied as review context. Establish that CI and release work stays on the mechanism that record settles, and that a job this change adds is actually wired to what its name claims.",
-      "scope": [".github/workflows/**", ".github/**"],
+      "scope": [
+        ".github/workflows/**",
+        ".github/**"
+      ],
       "severity": "high"
     },
     {
       "id": "adr-0008-trunk-based-branch-protection",
       "rule": "Enforce the Agent Rules of decision record 0008-trunk-based-branch-protection, supplied as review context. Establish that this change assumes no branching model other than the recorded one. Branch protection itself is live organisation state and is outside a diff review's reach.",
-      "scope": [".github/**", "docs/**"],
+      "scope": [
+        ".github/**",
+        "docs/**"
+      ],
       "severity": "medium"
     },
     {
@@ -67,7 +92,10 @@
     {
       "id": "adr-0010-manifest-schema-migrations",
       "rule": "Enforce the Agent Rules of decision record 0010-manifest-schema-migrations, supplied as review context. Establish that a manifest shape change arrives as a migration the record's mechanism runs, rather than as a read-time fixup.",
-      "scope": ["src/manifest-migrations/**", "src/commands/**"],
+      "scope": [
+        "src/manifest-migrations/**",
+        "src/commands/**"
+      ],
       "severity": "high"
     },
     {
@@ -115,19 +143,28 @@
     {
       "id": "adr-0015-import-harness-selection-flag",
       "rule": "Enforce the Agent Rules of decision record 0015-import-harness-selection-flag, supplied as review context. Establish that harness selection happens where that record puts it, and that import's manifest precondition is unchanged.",
-      "scope": ["src/commands/init.ts", "src/commands/import.ts"],
+      "scope": [
+        "src/commands/init.ts",
+        "src/commands/import.ts"
+      ],
       "severity": "high"
     },
     {
       "id": "adr-0016-group-member-manifest-format",
       "rule": "Enforce the Agent Rules of decision record 0016-group-member-manifest-format, supplied as review context. Establish that group parsing and member resolution read the recorded manifest shape, and that this change tolerates no undeclared variant of it.",
-      "scope": ["src/registry/group-resolve.ts", "src/commands/import.ts"],
+      "scope": [
+        "src/registry/group-resolve.ts",
+        "src/commands/import.ts"
+      ],
       "severity": "high"
     },
     {
       "id": "adr-0017-manifest-schema-v2-group-membership",
       "rule": "Enforce the Agent Rules of decision record 0017-manifest-schema-v2-group-membership, supplied as review context. Establish that group membership is recorded in the manifest as that record settles, and that the migration path to it is intact.",
-      "scope": ["src/manifest-migrations/index.ts", "src/commands/import.ts"],
+      "scope": [
+        "src/manifest-migrations/index.ts",
+        "src/commands/import.ts"
+      ],
       "severity": "high"
     },
     {
@@ -143,7 +180,10 @@
     {
       "id": "adr-0019-registry-removed-metadata-flag",
       "rule": "Enforce the Agent Rules of decision record 0019-registry-removed-metadata-flag, supplied as review context. Establish that removal is expressed by the recorded flag on the content itself, and that this change introduces no separate list of removed items that could drift from it.",
-      "scope": ["src/commands/import.ts", "src/registry/**"],
+      "scope": [
+        "src/commands/import.ts",
+        "src/registry/**"
+      ],
       "severity": "high"
     },
     {
@@ -159,19 +199,18 @@
     {
       "id": "adr-0021-block-first-time-import-of-removed-target",
       "rule": "Enforce the Agent Rules of decision record 0021-block-first-time-import-of-removed-target, supplied as review context. Establish that a first-time import of a removed target is refused end to end — that the refusal actually fires on the primary-target resolution path, changes nothing on disk, and leaves the manifest untouched. A refusal branch that exists but is unreachable is a violation.",
-      "scope": ["src/commands/import.ts", "src/registry/group-resolve.ts"],
+      "scope": [
+        "src/commands/import.ts",
+        "src/registry/group-resolve.ts"
+      ],
       "severity": "high"
     },
     {
       "id": "adr-0022-remove-force-flags-not-prompt",
       "rule": "Enforce the Agent Rules of decision record 0022-remove-force-flags-not-prompt, supplied as review context. Establish that drift and local-edit handling on the named skill/group removal path is gated by the recorded flags rather than by an interactive prompt.",
-      "scope": ["src/commands/remove.ts"],
-      "severity": "high"
-    },
-    {
-      "id": "adr-0023-remove-harness-drop-unconditional",
-      "rule": "Enforce the Agent Rules of decision record 0023-remove-harness-drop-unconditional, supplied as review context. Establish which branch of remove each gate lies in: every use of --force-all, --force-clean, and any disk-hashing or empty-tree helper must sit on the named skill/group removal path, and the harness-drop branch must reach none of them. Finding the identifiers is not enough — establish the branch they fall in.",
-      "scope": ["src/commands/remove.ts"],
+      "scope": [
+        "src/commands/remove.ts"
+      ],
       "severity": "high"
     },
     {
@@ -241,7 +280,10 @@
     {
       "id": "adr-0030-greptile-review-machine-check-context",
       "rule": "Enforce the Agent Rules of decision record 0030-greptile-review-machine-check-context, supplied as review context. Establish that a record declaring greptile-review carries a reviewer bullet, one fenced block, an expected result and no reason bullet; that its check establishes the delegation rather than the decision; and that a passing delegating record is never reported as a plain pass.",
-      "scope": ["scripts/adr/**", "docs/architecture/decisions/**"],
+      "scope": [
+        "scripts/adr/**",
+        "docs/architecture/decisions/**"
+      ],
       "severity": "high"
     }
   ]
