@@ -49,6 +49,6 @@ Nothing downstream is written against an assumption the documentation leaves amb
 ## 8. End-to-end verification
 
 - [x] 8.1 Run `node scripts/adr/check.mjs --registry ../hatch-skills` and verify five records report `JUDGE`, exactly [0004](../../../docs/architecture/decisions/0004-github-vcs-platform.md) and [0008](../../../docs/architecture/decisions/0008-trunk-based-branch-protection.md) report unverified, and nothing is non-conforming
-- [ ] 8.2 Open a pull request deleting one rule from `.greptile/config.json`, verify `decision-records` fails and names the record that lost its judge, then close it unmerged
-- [ ] 8.3 Open a pull request adding a `.greptile/` directory in a subdirectory, verify the configuration-shape check fails and names it, then close it unmerged
-- [ ] 8.4 Run `npm run lint`, `npm run typecheck`, `npm run test` and `npm run build`, and verify all four pass
+- [x] 8.2 Open a pull request deleting one rule from `.greptile/config.json`, verify `decision-records` fails and names the record that lost its judge, then close it unmerged
+- [x] 8.3 Open a pull request adding a `.greptile/` directory in a subdirectory, verify the configuration-shape check fails and names it, then close it unmerged
+- [x] 8.4 Run `npm run lint`, `npm run typecheck`, `npm run test` and `npm run build`, and verify all four pass
