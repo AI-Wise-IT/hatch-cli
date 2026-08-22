@@ -225,7 +225,9 @@ describe("the delegating context", () => {
   });
 
   it("requires a stated expected result", () => {
-    const found = problems({ "Machine Check": withoutLine("Expected result:") });
+    const found = problems({
+      "Machine Check": withoutLine("Expected result:"),
+    });
     expect(found).toContain("states no `Expected result:` for its check");
   });
 

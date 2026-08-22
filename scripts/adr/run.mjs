@@ -138,8 +138,9 @@ export function report(results, { repo }) {
   const counts = {};
   for (const { outcome } of results)
     counts[outcome] = (counts[outcome] ?? 0) + 1;
-  const parts = SUMMARY_ORDER.filter((key) => counts[key])
-    .map((key) => `${counts[key]} ${key}`);
+  const parts = SUMMARY_ORDER.filter((key) => counts[key]).map(
+    (key) => `${counts[key]} ${key}`,
+  );
   lines.push("");
   lines.push(`${results.length} records (repo: ${repo}): ${parts.join(", ")}`);
   return lines.join("\n");
