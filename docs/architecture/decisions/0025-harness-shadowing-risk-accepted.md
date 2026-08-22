@@ -57,10 +57,18 @@ None. This record accepts a risk rather than establishing an enforced guarantee 
 
 ## Machine Check
 
-- **context:** review-only
-- **reason:** this record accepts a risk rather than establishing a mechanism, so there is nothing whose presence a command can confirm. Grepping the collision-check module for "shadow" and finding nothing is satisfied equally by a module that deliberately omits shadowing detection and by one that implements it under any other name.
+- **context:** greptile-review
+- **reviewer:** Greptile, by the rule `adr-0025-harness-shadowing-risk-accepted` in `.greptile/config.json`. This record accepts a risk rather than establishing a mechanism, so there is nothing whose presence a command can confirm. Grepping the collision-check module for "shadow" and finding nothing is satisfied equally by a module that deliberately omits shadowing detection and by one that implements it under any other name.
 
-A reviewer establishes it by confirming that no check in either repository compares `resolveSkillFolderName`'s resolution behavior before and after a harness-registry change, and that neither the CLI's collision check ([0024-registry-collision-predicate](0024-registry-collision-predicate.md)) nor any registry-side job flags a top-level name merely for ending in a reserved harness code.
+The check below establishes only that the delegation is intact — that the rule exists, is active, and names this record. It does not establish the decision.
+
+```bash
+node scripts/adr/greptile-rule.mjs 0025-harness-shadowing-risk-accepted
+```
+
+Expected result: exit 0, reporting that the rule is active and names this record. A non-zero exit means this record has lost its judge, and the run fails.
+
+The reviewer establishes it by confirming that no check in either repository compares `resolveSkillFolderName`'s resolution behavior before and after a harness-registry change, and that neither the CLI's collision check ([0024-registry-collision-predicate](0024-registry-collision-predicate.md)) nor any registry-side job flags a top-level name merely for ending in a reserved harness code.
 
 A future change that *adds* such detection does not fail this record — it supersedes it.
 

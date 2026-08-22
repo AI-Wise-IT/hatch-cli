@@ -59,10 +59,18 @@ The same review also raised whether a *group* with a removed *member* should blo
 
 ## Machine Check
 
-- **context:** review-only
-- **reason:** establishing this record needs a built CLI and a project prepared to a specific state — initialized, recording `testProject: true`, and having never imported `_removed-fixture`. Nothing in a checkout carries that state, and a command that merely greps the refusal path passes whether or not the refusal actually fires.
+- **context:** greptile-review
+- **reviewer:** Greptile, by the rule `adr-0021-block-first-time-import-of-removed-target` in `.greptile/config.json`. Establishing this record needs a built CLI and a project prepared to a specific state — initialized, recording `testProject: true`, and having never imported `_removed-fixture`. Nothing in a checkout carries that state, and a command that merely greps the refusal path passes whether or not the refusal actually fires.
 
-A reviewer establishes it by running, from such a project:
+The check below establishes only that the delegation is intact — that the rule exists, is active, and names this record. It does not establish the decision.
+
+```bash
+node scripts/adr/greptile-rule.mjs 0021-block-first-time-import-of-removed-target
+```
+
+Expected result: exit 0, reporting that the rule is active and names this record. A non-zero exit means this record has lost its judge, and the run fails.
+
+The reviewer establishes it by reading `src/commands/import.ts` and confirming that the refusal fires on the primary-target resolution path, changes nothing on disk, and leaves the manifest untouched — a refusal branch that exists but is unreachable does not satisfy this record. Run from a project in the state above, that behaviour appears as:
 
 ```text
 node dist/index.js import _removed-fixture; echo "exit=$?"

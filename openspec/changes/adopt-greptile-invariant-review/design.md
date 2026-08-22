@@ -96,7 +96,7 @@ One entry per accepted record. A conformance check asserts the entry set equals 
 
 ## Risks / Trade-offs
 
-**The documented base for `files.json` paths contradicts its own examples.** The reference states paths resolve relative to the `.greptile/` directory, while every example reads as repository-root-relative. → Resolved empirically on a throwaway pull request before any of the twenty-eight entries are written; whichever base the tool actually uses is the one the generator emits.
+**The documented base for `files.json` paths reads two ways.** The reference states paths resolve relative to the `.greptile/` directory, while every example reads as repository-root-relative. → **Settled: paths resolve relative to the directory *containing* `.greptile/`.** For root-only configuration those two readings are the same thing, so the apparent contradiction dissolves — it is only visible for nested configuration, which this design forbids anyway. Established with `greptile config --json`, which reports all twenty-eight entries resolving from repository-root-relative paths, rather than on a throwaway pull request.
 
 **Cross-repository context may not deliver record *text* to `hatch-skills`.** → If it does not, that repository's rules cite records by permanent URL instead. The no-copy requirement holds either way; what degrades is how much the reviewer can read, not where the source of truth lives.
 
@@ -112,7 +112,7 @@ One entry per accepted record. A conformance check asserts the entry set equals 
 
 Order matters in one place: a delegation check fails unless its rule already exists, so configuration lands before any record is converted.
 
-1. Verify `files.json` path resolution and the cross-repository mechanism empirically, on a throwaway pull request.
+1. Verify `files.json` path resolution and the cross-repository mechanism empirically. The Greptile CLI's `greptile config --json` reports the effective merged configuration for a checkout, which establishes path resolution and rule loading directly; only the cross-repository mechanism still needs a real review to confirm.
 2. Land the contract extension, the runner changes, the helper, and their tests. Every existing record still conforms — nothing declares the new context yet.
 3. Land `.greptile/` in `hatch-cli`, with a rule for every accepted record.
 4. Convert the five records from `review-only` to `greptile-review`.

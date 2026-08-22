@@ -51,10 +51,18 @@ This gap — whether AF-5 should inherit AF-2/AF-3's gating mechanism or remain 
 
 ## Machine Check
 
-- **context:** review-only
-- **reason:** this record's rule is about *which branch* of `hatch remove` the drift and local-edit gating may appear in. A grep can find the identifiers but cannot tell which branch a match falls in, so its success is unrelated to what the record asserts.
+- **context:** greptile-review
+- **reviewer:** Greptile, by the rule `adr-0023-remove-harness-drop-unconditional` in `.greptile/config.json`. This record's rule is about *which branch* of `hatch remove` the drift and local-edit gating may appear in. A grep can find the identifiers but cannot tell which branch a match falls in, so its success is unrelated to what the record asserts.
 
-A reviewer establishes it by reading `src/commands/remove.ts` and confirming that every occurrence of `--force-all`, `--force-clean`, and any disk-hashing or empty-tree helper lies on the named skill/group removal path (AF-1 through AF-4), and that the `--harness` argument-parsing and drop-execution branch reaches none of them — its only precondition being UC-4's "at least one harness must remain".
+The check below establishes only that the delegation is intact — that the rule exists, is active, and names this record. It does not establish the decision.
+
+```bash
+node scripts/adr/greptile-rule.mjs 0023-remove-harness-drop-unconditional
+```
+
+Expected result: exit 0, reporting that the rule is active and names this record. A non-zero exit means this record has lost its judge, and the run fails.
+
+The reviewer establishes it by reading `src/commands/remove.ts` and confirming that every occurrence of `--force-all`, `--force-clean`, and any disk-hashing or empty-tree helper lies on the named skill/group removal path (AF-1 through AF-4), and that the `--harness` argument-parsing and drop-execution branch reaches none of them — its only precondition being UC-4's "at least one harness must remain".
 
 ## Precedence
 

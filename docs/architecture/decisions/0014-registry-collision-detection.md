@@ -70,10 +70,18 @@ The harness-registry's reserved-code set only ever grows ([0001](0001-harness-su
 
 ## Machine Check
 
-- **context:** review-only
-- **reason:** this record decides that a two-sided check exists and where each side runs. Whether a job in either repository's workflow actually invokes the collision check — rather than merely mentioning a string that looks like it does — is a judgment about what the workflow means, and a grep for a name in a YAML file passes whether or not the job it names is wired to anything.
+- **context:** greptile-review
+- **reviewer:** Greptile, by the rule `adr-0014-registry-collision-detection` in `.greptile/config.json`. Whether a job in either repository's workflow actually invokes the collision check — rather than merely mentioning a string that looks like it does — is a judgment about what the workflow means, and a grep for a name in a YAML file passes whether or not the job it names is wired to anything.
 
-A reviewer establishes it by reading both workflow files and confirming:
+The check below establishes only that the delegation is intact — that the rule exists, is active, and names this record. It does not establish the decision.
+
+```bash
+node scripts/adr/greptile-rule.mjs 0014-registry-collision-detection
+```
+
+Expected result: exit 0, reporting that the rule is active and names this record. A non-zero exit means this record has lost its judge, and the run fails.
+
+The reviewer establishes it by reading both workflow files and confirming:
 
 - `hatch-skills`' CI carries a job that installs `@ai-wise/hatchcli` and invokes its collision check against the registry checkout;
 - `hatch-cli`'s CI carries a separate job, gated on harness-registry/resolution changes, that fetches `hatch-skills` and invokes the same check;

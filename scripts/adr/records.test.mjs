@@ -164,6 +164,93 @@ describe("conformance", () => {
   });
 });
 
+/** A well-formed `greptile-review` section, so a test can break one thing about it. */
+function delegating(extra = []) {
+  return [
+    "- **context:** greptile-review",
+    "- **reviewer:** Greptile, by the rule `adr-0001-example` in `.greptile/config.json`.",
+    "",
+    "```bash",
+    "node scripts/adr/greptile-rule.mjs 0001-example",
+    "```",
+    "",
+    "Expected result: exit 0.",
+    "",
+    "The reviewer establishes it by reading the module and confirming the predicate.",
+    ...extra,
+  ].join("\n");
+}
+
+const withoutLine = (prefix) =>
+  delegating()
+    .split("\n")
+    .filter((line) => !line.startsWith(prefix))
+    .join("\n");
+
+describe("the delegating context", () => {
+  it("accepts a well-formed delegating record", () => {
+    const parsed = parseRecord(
+      "0001-example.md",
+      record({ "Machine Check": delegating() }),
+    );
+    expect(parsed.context).toBe("greptile-review");
+    expect(parsed.reviewer).toMatch(/^Greptile,/);
+    expect(parsed.command).toBe(
+      "node scripts/adr/greptile-rule.mjs 0001-example",
+    );
+    expect(conformanceProblems(parsed)).toEqual([]);
+  });
+
+  it("requires a reviewer bullet naming the judge", () => {
+    const found = problems({
+      "Machine Check": withoutLine("- **reviewer:**"),
+    });
+    expect(found).toContain(
+      "declares context `greptile-review` but names no `reviewer` for it",
+    );
+  });
+
+  it("requires a fenced bash block, because the delegation is executable", () => {
+    const found = problems({
+      "Machine Check": [
+        "- **context:** greptile-review",
+        "- **reviewer:** Greptile, by the rule `adr-0001-example`.",
+        "",
+        "Expected result: exit 0.",
+      ].join("\n"),
+    });
+    expect(found).toContain(
+      "declares a delegating context but carries no fenced `bash` block",
+    );
+  });
+
+  it("requires a stated expected result", () => {
+    const found = problems({ "Machine Check": withoutLine("Expected result:") });
+    expect(found).toContain("states no `Expected result:` for its check");
+  });
+
+  it("refuses a reason bullet, which belongs to a record no reviewer judges", () => {
+    const found = problems({
+      "Machine Check": delegating(["", "- **reason:** it needs judgment."]),
+    });
+    expect(found).toContain(
+      "declares context `greptile-review` but also names a `reason`, which belongs to a record no reviewer judges",
+    );
+  });
+
+  it("holds a delegating check to the same unfailable-command rules", () => {
+    const found = problems({
+      "Machine Check": delegating().replace(
+        "greptile-rule.mjs 0001-example",
+        "greptile-rule.mjs 0001-example || true",
+      ),
+    });
+    expect(found.some((p) => p.includes("exits 0 whatever it finds"))).toBe(
+      true,
+    );
+  });
+});
+
 describe("unfailableReason", () => {
   it("accepts a command whose failure propagates", () => {
     expect(unfailableReason("grep -q vitest package.json")).toBeNull();

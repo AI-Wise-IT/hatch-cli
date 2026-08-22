@@ -6,20 +6,24 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EXECUTABLE_CONTEXTS } from "./records.mjs";
+import { DELEGATING_CONTEXTS, EXECUTABLE_CONTEXTS } from "./records.mjs";
 
 export const REPOS = ["cli", "registry", "all"];
 
+// A delegating check reads the CLI repository's own reviewer configuration, so
+// it runs wherever `cli-repo` runs and nowhere else.
+const RUNNABLE_CONTEXTS = [...EXECUTABLE_CONTEXTS, ...DELEGATING_CONTEXTS];
+
 const CONTEXTS_BY_REPO = {
-  cli: ["cli-repo", "both"],
+  cli: ["cli-repo", "both", ...DELEGATING_CONTEXTS],
   registry: ["registry-checkout", "both"],
-  all: EXECUTABLE_CONTEXTS,
+  all: RUNNABLE_CONTEXTS,
 };
 
 /** Where a record's check belongs in this run, before anything is executed. */
 export function classify(record, repo) {
   if (record.status === "superseded") return "skipped";
-  if (!EXECUTABLE_CONTEXTS.includes(record.context)) return "unverified";
+  if (!RUNNABLE_CONTEXTS.includes(record.context)) return "unverified";
   if (!CONTEXTS_BY_REPO[repo].includes(record.context)) return "deferred";
   return "execute";
 }
@@ -70,6 +74,12 @@ export function runAll(records, { repo, roots }) {
     if (placement !== "execute")
       return { record, outcome: placement, output: "" };
     const { outcome, output } = execute(record, roots);
+    // A passing delegation check establishes that the record's judge is still
+    // configured, never that the decision holds, so it is never a plain pass.
+    // A failing one is an ordinary failure and blocks like any other.
+    if (outcome === "passed" && DELEGATING_CONTEXTS.includes(record.context)) {
+      return { record, outcome: "delegated", output };
+    }
     return { record, outcome, output };
   });
 }
@@ -77,15 +87,26 @@ export function runAll(records, { repo, roots }) {
 const LABELS = {
   passed: "PASS ",
   failed: "FAIL ",
+  delegated: "JUDGE",
   unverified: "UNVER",
   skipped: "SKIP ",
   deferred: "DEFER",
 };
 
+const SUMMARY_ORDER = [
+  "passed",
+  "failed",
+  "delegated",
+  "unverified",
+  "skipped",
+  "deferred",
+];
+
 const OTHER_REPO = {
   "cli-repo": "the CLI repository's job",
   "registry-checkout": "the registry repository's job",
   both: "the other repository's job",
+  "greptile-review": "the CLI repository's job",
 };
 
 /** Renders the per-record report and the summary that accounts for every record. */
@@ -104,6 +125,11 @@ export function report(results, { repo }) {
         `        reason: ${record.reason ?? "none given — this record is non-conforming"}`,
       );
     }
+    if (outcome === "delegated") {
+      lines.push(
+        `        judged by: ${record.reviewer ?? "no reviewer named — this record is non-conforming"}`,
+      );
+    }
     if (outcome === "failed" && output) {
       for (const line of output.split(/\r?\n/)) lines.push(`        ${line}`);
     }
@@ -112,8 +138,7 @@ export function report(results, { repo }) {
   const counts = {};
   for (const { outcome } of results)
     counts[outcome] = (counts[outcome] ?? 0) + 1;
-  const parts = ["passed", "failed", "unverified", "skipped", "deferred"]
-    .filter((key) => counts[key])
+  const parts = SUMMARY_ORDER.filter((key) => counts[key])
     .map((key) => `${counts[key]} ${key}`);
   lines.push("");
   lines.push(`${results.length} records (repo: ${repo}): ${parts.join(", ")}`);
