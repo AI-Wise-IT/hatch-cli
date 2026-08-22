@@ -26,8 +26,16 @@ export const FROZEN_SECTIONS = ["Decision", "Agent Rules", "Invariants"];
 export const STATUSES = ["concept", "accepted", "superseded"];
 
 export const EXECUTABLE_CONTEXTS = ["cli-repo", "registry-checkout", "both"];
+// A delegating context runs a command like an executable one, but that command
+// establishes only that the record's judge is still configured — never the
+// decision itself. The runner reports it under its own outcome for that reason.
+export const DELEGATING_CONTEXTS = ["greptile-review"];
 export const NON_EXECUTABLE_CONTEXTS = ["live-github", "review-only"];
-export const CONTEXTS = [...EXECUTABLE_CONTEXTS, ...NON_EXECUTABLE_CONTEXTS];
+export const CONTEXTS = [
+  ...EXECUTABLE_CONTEXTS,
+  ...DELEGATING_CONTEXTS,
+  ...NON_EXECUTABLE_CONTEXTS,
+];
 
 // A pipeline ending in one of these swallows the exit status of everything
 // upstream of it, so a check built that way can only ever report success.
@@ -90,6 +98,7 @@ export function parseRecord(name, text) {
     status: bulletValue(metadata, "status"),
     context: bulletValue(check, "context"),
     reason: bulletValue(check, "reason"),
+    reviewer: bulletValue(check, "reviewer"),
     commands: blocks,
     command: blocks[0] ?? null,
     expected: /^Expected result/m.test(check ?? ""),
@@ -153,10 +162,14 @@ export function conformanceProblems(record) {
     return problems;
   }
 
-  if (EXECUTABLE_CONTEXTS.includes(record.context)) {
+  const delegating = DELEGATING_CONTEXTS.includes(record.context);
+
+  if (EXECUTABLE_CONTEXTS.includes(record.context) || delegating) {
     if (record.commands.length === 0) {
       problems.push(
-        "declares an executable context but carries no fenced `bash` block",
+        delegating
+          ? "declares a delegating context but carries no fenced `bash` block"
+          : "declares an executable context but carries no fenced `bash` block",
       );
       return problems;
     }
@@ -175,6 +188,22 @@ export function conformanceProblems(record) {
     }
     const unfailable = unfailableReason(record.command);
     if (unfailable) problems.push(`carries a check that ${unfailable}`);
+
+    // A delegating record names its judge in place of the `reason` a record
+    // nothing verifies carries. Carrying both would claim the record is at
+    // once judged and unjudgeable.
+    if (delegating) {
+      if (!record.reviewer) {
+        problems.push(
+          `declares context \`${record.context}\` but names no \`reviewer\` for it`,
+        );
+      }
+      if (record.reason) {
+        problems.push(
+          `declares context \`${record.context}\` but also names a \`reason\`, which belongs to a record no reviewer judges`,
+        );
+      }
+    }
   } else {
     if (!record.reason) {
       problems.push(
