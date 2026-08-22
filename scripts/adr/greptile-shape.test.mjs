@@ -119,7 +119,8 @@ describe("shapeProblems", () => {
     expect(
       problems(root).some(
         (p) =>
-          p.includes("0099-invented") && p.includes("not an accepted record"),
+          p.includes("0099-invented") &&
+          p.includes("not the path of an accepted record"),
       ),
     ).toBe(true);
   });
@@ -137,6 +138,83 @@ describe("shapeProblems", () => {
         (p) =>
           p.includes("adr-0024-registry-collision-predicate") &&
           p.includes("0024-registry-collision-predicate"),
+      ),
+    ).toBe(true);
+  });
+
+  it("fails a files.json entry substituted for a different file of the same name", () => {
+    const root = checkout();
+    const path = join(root, ".greptile", "files.json");
+    const files = JSON.parse(readFileSync(path, "utf8"));
+    for (const entry of files.files) {
+      if (entry.path.includes("0024-registry-collision-predicate")) {
+        entry.path = "docs/decoy/0024-registry-collision-predicate.md";
+      }
+    }
+    writeFileSync(path, JSON.stringify(files, null, 2));
+    const found = problems(root);
+    expect(
+      found.some(
+        (p) =>
+          p.includes("carries no entry") &&
+          p.includes("0024-registry-collision-predicate"),
+      ),
+    ).toBe(true);
+    expect(
+      found.some(
+        (p) =>
+          p.includes("docs/decoy/0024-registry-collision-predicate.md") &&
+          p.includes("not the path of an accepted record"),
+      ),
+    ).toBe(true);
+  });
+
+  it("fails an accepted record whose rule is present but disabled", () => {
+    const root = checkout();
+    const value = config(root);
+    for (const rule of value.rules) {
+      if (rule.id === "adr-0026-git-optional-dependency") rule.enabled = false;
+    }
+    writeConfig(root, value);
+    const found = problems(root);
+    expect(
+      found.some(
+        (p) =>
+          p.includes("0026-git-optional-dependency") &&
+          p.includes("not covered") &&
+          p.includes("disabled"),
+      ),
+    ).toBe(true);
+  });
+
+  it("fails an accepted record switched off through `disabledRules`", () => {
+    const root = checkout();
+    const value = config(root);
+    value.disabledRules = ["adr-0026-git-optional-dependency"];
+    writeConfig(root, value);
+    expect(
+      problems(root).some(
+        (p) =>
+          p.includes("0026-git-optional-dependency") &&
+          p.includes("disabledRules"),
+      ),
+    ).toBe(true);
+  });
+
+  it("fails an accepted record whose rule no longer names it", () => {
+    const root = checkout();
+    const value = config(root);
+    for (const rule of value.rules) {
+      if (rule.id === "adr-0026-git-optional-dependency") {
+        rule.rule = "Reach git through one module.";
+      }
+    }
+    writeConfig(root, value);
+    expect(
+      problems(root).some(
+        (p) =>
+          p.includes("0026-git-optional-dependency") &&
+          p.includes("does not name record"),
       ),
     ).toBe(true);
   });

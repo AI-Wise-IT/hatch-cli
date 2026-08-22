@@ -12,7 +12,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { argv, exit } from "node:process";
 import { pathToFileURL } from "node:url";
-import { ruleIdFor } from "./greptile-rule.mjs";
+import { delegationProblem, readConfig } from "./greptile-rule.mjs";
 import { RECORDS_DIR, loadRecords } from "./records.mjs";
 
 const CONFIG_DIR = ".greptile";
@@ -108,42 +108,49 @@ export function shapeProblems({ root = ".", records = RECORDS_DIR } = {}) {
       `\`${CONFIG_DIR}/files.json\` is not valid JSON (${files.error})`,
     );
   } else {
+    // Whole paths, not basenames. An entry naming a different file that happens
+    // to share a record's filename would otherwise satisfy the check while the
+    // reviewer read something other than the governing record.
+    const base = relative(root, records).split(sep).join("/");
+    const expected = new Map(accepted.map((id) => [`${base}/${id}.md`, id]));
     const entries = Array.isArray(files.value?.files) ? files.value.files : [];
     const referenced = new Set(
       entries
         .map((entry) => entry?.path)
         .filter((path) => typeof path === "string")
-        .map((path) => path.split("/").pop().replace(/\.md$/, "")),
+        .map((path) => path.split(sep).join("/").replace(/^\.\//, "")),
     );
-    for (const id of accepted) {
-      if (!referenced.has(id)) {
+    for (const [path, id] of expected) {
+      if (!referenced.has(path)) {
         problems.push(
-          `\`${CONFIG_DIR}/files.json\` carries no entry for accepted record \`${id}\`, so the reviewer never reads it`,
+          `\`${CONFIG_DIR}/files.json\` carries no entry \`${path}\` for accepted record \`${id}\`, so the reviewer never reads it`,
         );
       }
     }
-    for (const id of referenced) {
-      if (!accepted.includes(id)) {
+    for (const path of referenced) {
+      if (!expected.has(path)) {
         problems.push(
-          `\`${CONFIG_DIR}/files.json\` references \`${id}\`, which is not an accepted record`,
+          `\`${CONFIG_DIR}/files.json\` references \`${path}\`, which is not the path of an accepted record`,
         );
       }
     }
   }
 
-  // 5 — every accepted record has a rule bound to it.
+  // 5 — every accepted record has a rule that is bound to it, active, and names
+  // it. Presence alone is not coverage: a rule left in place but switched off,
+  // through `enabled: false` or `disabledRules`, enforces nothing while still
+  // reading as configured.
   if (!config.missing && !config.error) {
-    const rules = Array.isArray(config.value.rules) ? config.value.rules : [];
-    const ids = new Set(
-      rules
-        .filter((rule) => rule !== null && typeof rule === "object")
-        .map((rule) => rule.id),
-    );
+    const configPath = join(configDir, "config.json");
+    const source = readConfig(configPath);
     for (const id of accepted) {
-      if (!ids.has(ruleIdFor(id))) {
-        problems.push(
-          `\`${CONFIG_DIR}/config.json\` carries no rule \`${ruleIdFor(id)}\` for accepted record \`${id}\``,
-        );
+      const problem = delegationProblem(
+        source,
+        id,
+        `${CONFIG_DIR}/config.json`,
+      );
+      if (problem !== null) {
+        problems.push(`accepted record \`${id}\` is not covered: ${problem}`);
       }
     }
   }
