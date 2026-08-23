@@ -81,17 +81,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # ADR-0014's shape: a checkout scoped by the same Contents-read token.
-      # Only a record declaring context `both` reads it; none does today, and
-      # the checkout is here so one can without a workflow change.
-      - name: Checkout hatch-skills (read-only credential)
-        uses: actions/checkout@v4
-        with:
-          repository: AI-Wise-IT/hatch-skills
-          token: ${{ secrets.HATCH_SKILLS_READ_TOKEN }}
-          path: hatch-skills-checkout
+      # Every record whose check needs registry content declares context
+      # `registry-checkout`, and those checks run in the registry repository's
+      # own job. Nothing here reads a registry root, so this job clones
+      # nothing: a record declaring context `both` would add the checkout and
+      # pass `--registry` alongside it.
       - name: Conformance, and every check whose context is this repo
-        run: node scripts/adr/check.mjs --repo cli --registry hatch-skills-checkout
+        run: node scripts/adr/check.mjs --repo cli
       - name: Frozen sections of accepted records are unedited
         if: github.event_name == 'pull_request'
         run: |

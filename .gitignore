@@ -1,5 +1,8 @@
 node_modules/
 dist/
+# A staged clone of the private registry, created by the collision check.
+# Never part of this repository — hatch-cli is public, hatch-skills is not.
+hatch-skills-checkout/
 *.log
 .env
 .claude/settings.local.json
