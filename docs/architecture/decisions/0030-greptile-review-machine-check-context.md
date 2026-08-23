@@ -24,7 +24,7 @@ A sixth machine-check context, `greptile-review`, joins the record contract. It 
 
 The contract already required that a decision whose verification needs judgment declare that, rather than present a command whose success is unrelated to the property it asserts. Five records did exactly that and were reported unverified.
 
-That was honest but terminal. The record said "a reviewer establishes this", and nothing in the project established that a reviewer ever would. Once [0029-greptile-continuous-review](0029-greptile-continuous-review.md) put a reviewer in place with a per-record rule, the records could name it — but naming a judge is worth nothing if the judge can be removed without a trace. A reviewer that can be silently switched off is worse than no reviewer, because the record would claim a judge it no longer has.
+That was honest but terminal. The record said "a reviewer establishes this", and nothing in the project established that a reviewer ever would. Once [0031-greptile-review-with-repo-cluster-context](0031-greptile-review-with-repo-cluster-context.md) put a reviewer in place with a per-record rule, the records could name it — but naming a judge is worth nothing if the judge can be removed without a trace. A reviewer that can be silently switched off is worse than no reviewer, because the record would claim a judge it no longer has.
 
 So the delegation itself became a machine check like any other: same runner, same trigger, blocking on failure. What a delegating record asserts is narrow and true — the rule is there, it is on, and it points at this record. What it deliberately does not assert is that the decision holds. That is the reviewer's job, and its answer arrives as pull-request comments a human reads.
 
@@ -37,13 +37,13 @@ The reporting outcome is the other half. Folding a delegated record into `PASS` 
 - **Reporting a delegated record as `PASS`.** Rejected, per Decision 4.
 - **The label `DELEG` rather than `JUDGE`.** Rejected. The report already carries `DEFER`, and two labels differing in one letter in a fixed-width column is a report that gets misread.
 - **Letting a delegating record keep its `reason` bullet.** Rejected. It would claim the record is at once judged and unjudgeable.
-- **Parsing the reviewer's verdicts and gating on them.** Rejected. That would make an unreproducible judgment a merge gate, which [0029-greptile-continuous-review](0029-greptile-continuous-review.md) settles against.
+- **Parsing the reviewer's verdicts and gating on them.** Rejected. That would make an unreproducible judgment a merge gate, which [0031-greptile-review-with-repo-cluster-context](0031-greptile-review-with-repo-cluster-context.md) settles against.
 
 ## Trade-offs Accepted
 
 - **A green `JUDGE` proves less than a green `PASS`.** It establishes that the question is still being asked, not that the answer is right. This is stated in the report rather than hidden, and it is strictly more than the `UNVER` it replaces.
 - **The helper is a single point of failure for five records at once.** A bug making it exit 0 unconditionally would silently un-verify every delegation. Mitigated by unit-testing the failing cases — missing rule, disabled rule, rule switched off through `disabledRules`, rule not naming its record — not only the passing one.
-- **`review-only` becomes hard to reach for an accepted record.** [0029-greptile-continuous-review](0029-greptile-continuous-review.md) gives every accepted record a rule, and Decision 5 forbids a `review-only` record from having one. Together they mean an accepted record whose verification needs judgment declares `greptile-review`. This is deliberate: the reviewer is already reading every record, so a record claiming nobody judges it would be wrong. `review-only` remains available to a `concept` record and to any record whose rule is deliberately absent.
+- **`review-only` becomes hard to reach for an accepted record.** [0031-greptile-review-with-repo-cluster-context](0031-greptile-review-with-repo-cluster-context.md) gives every accepted record a rule, and Decision 5 forbids a `review-only` record from having one. Together they mean an accepted record whose verification needs judgment declares `greptile-review`. This is deliberate: the reviewer is already reading every record, so a record claiming nobody judges it would be wrong. `review-only` remains available to a `concept` record and to any record whose rule is deliberately absent.
 
 ## Consequences
 
@@ -88,6 +88,6 @@ Expected result: exit 0, reporting that every delegating record resolves its rul
 ## Precedence
 
 - Extends the record contract in `docs/architecture/decisions/README.md`, adding a sixth context alongside `cli-repo`, `registry-checkout`, `both`, `live-github` and `review-only`. It changes none of them.
-- Depends on [0029-greptile-continuous-review](0029-greptile-continuous-review.md) for the reviewer, its configuration shape, and the per-record rule this context resolves. The two are separate records because each is one decision, and abandoning the reviewer should not drag the contract extension with it.
+- Depends on [0031-greptile-review-with-repo-cluster-context](0031-greptile-review-with-repo-cluster-context.md) for the reviewer, its configuration shape, and the per-record rule this context resolves. The two are separate records because each is one decision, and abandoning the reviewer should not drag the contract extension with it.
 - Changes the `## Machine Check` section only of [0014-registry-collision-detection](0014-registry-collision-detection.md), [0021-block-first-time-import-of-removed-target](0021-block-first-time-import-of-removed-target.md), [0023-remove-harness-drop-unconditional](0023-remove-harness-drop-unconditional.md), [0024-registry-collision-predicate](0024-registry-collision-predicate.md) and [0025-harness-shadowing-risk-accepted](0025-harness-shadowing-risk-accepted.md). Their frozen sections are untouched and none is superseded.
 - No known conflicting decision records.

@@ -195,5 +195,6 @@ node scripts/adr/check-immutability.mjs --base main
 | 0026 | `0026-git-optional-dependency` | version-control-integration | accepted | [`0026-git-optional-dependency.md`](0026-git-optional-dependency.md) |
 | 0027 | `0027-testing-skill-convention` | skill-registry-group-structure | accepted | [`0027-testing-skill-convention.md`](0027-testing-skill-convention.md) |
 | 0028 | `0028-registry-discovery-live-walk` | registry-discovery | accepted | [`0028-registry-discovery-live-walk.md`](0028-registry-discovery-live-walk.md) |
-| 0029 | `0029-greptile-continuous-review` | continuous-code-review | accepted | [`0029-greptile-continuous-review.md`](0029-greptile-continuous-review.md) |
+| 0029 | `0029-greptile-continuous-review` | continuous-code-review | superseded | [`0029-greptile-continuous-review.md`](0029-greptile-continuous-review.md) |
 | 0030 | `0030-greptile-review-machine-check-context` | decision-record-convention | accepted | [`0030-greptile-review-machine-check-context.md`](0030-greptile-review-machine-check-context.md) |
+| 0031 | `0031-greptile-review-with-repo-cluster-context` | continuous-code-review | accepted | [`0031-greptile-review-with-repo-cluster-context.md`](0031-greptile-review-with-repo-cluster-context.md) |

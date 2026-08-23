@@ -113,12 +113,12 @@
       "description": "Registry discovery: a live walk over the contents API, with descriptions read from wherever each kind of content already keeps its prose — the accepted decision governing registry-discovery. Enforce what it mandates; do not restate it."
     },
     {
-      "path": "docs/architecture/decisions/0029-greptile-continuous-review.md",
-      "description": "Continuous code review: Greptile Cloud on both repositories, configured in-repo, advisory — the accepted decision governing continuous-code-review. Enforce what it mandates; do not restate it."
-    },
-    {
       "path": "docs/architecture/decisions/0030-greptile-review-machine-check-context.md",
       "description": "Machine-check context `greptile-review`: a record may name its judge, and the runner reports it as delegated — the accepted decision governing decision-record-convention. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0031-greptile-review-with-repo-cluster-context.md",
+      "description": "Continuous code review: Greptile on both repositories, standards in-repo, cross-repository records via a repo cluster — the accepted decision governing continuous-code-review. Enforce what it mandates; do not restate it."
     }
   ]
 }

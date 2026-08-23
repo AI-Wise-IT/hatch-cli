@@ -4,7 +4,8 @@
 
 - **id:** 0029-greptile-continuous-review
 - **component:** continuous-code-review
-- **status:** accepted
+- **status:** superseded
+- **superseded_by:** 0031-greptile-review-with-repo-cluster-context
 - **applies_to:** `.greptile/` in the Hatch CLI repo (hatch-cli) and the skill-content repo (hatch-skills); the standards those files declare; the set of repositories submitted to the reviewer
 - **decision_record:** `docs/architecture/decisions/0029-greptile-continuous-review.md`
 
@@ -91,6 +92,7 @@ The check reads this repository's configuration. `hatch-skills` carries its own 
 
 ## Precedence
 
+- Superseded by [0031-greptile-review-with-repo-cluster-context](0031-greptile-review-with-repo-cluster-context.md). Decision 3 of this record named `context.repos` as the mechanism by which a repository reads records it does not own, and Alternatives Considered rejected repository clusters on the premise that the two "read the same way". Measurement showed otherwise: `context.repos` alone does not deliver record text, and a cluster does. 0031 carries everything else here forward unchanged.
 - Extends the enforcement described in [0007-github-actions-deployment](0007-github-actions-deployment.md): the reviewer's own findings are advisory and post no status, so nothing here changes the required-check set that record established.
 - Applies the same reasoning as [0009-skill-versioning-semver-tags](0009-skill-versioning-semver-tags.md) and [0019-registry-removed-metadata-flag](0019-registry-removed-metadata-flag.md): a second copy of a fact, held where it can drift from its source, is rejected in favour of reading the source.
 - Accepts a risk in the same shape as [0025-harness-shadowing-risk-accepted](0025-harness-shadowing-risk-accepted.md): rule decay is stated so an agent can reason about it, not engineered against.

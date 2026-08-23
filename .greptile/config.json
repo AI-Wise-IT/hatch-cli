@@ -229,19 +229,19 @@
       "severity": "high"
     },
     {
-      "id": "adr-0029-greptile-continuous-review",
-      "rule": "Enforce the Agent Rules of decision record 0029-greptile-continuous-review, supplied as review context. Establish that reviewer configuration stays in-repo at the root only, that no second configuration form or nested .greptile directory appears, that statusCheck stays false, and that no decision record is copied into a repository that does not own it.",
+      "id": "adr-0030-greptile-review-machine-check-context",
+      "rule": "Enforce the Agent Rules of decision record 0030-greptile-review-machine-check-context, supplied as review context. Establish that a record declaring greptile-review carries a reviewer bullet, one fenced block, an expected result and no reason bullet; that its check establishes the delegation rather than the decision; and that a passing delegating record is never reported as a plain pass.",
+      "scope": ["scripts/adr/**", "docs/architecture/decisions/**"],
+      "severity": "high"
+    },
+    {
+      "id": "adr-0031-greptile-review-with-repo-cluster-context",
+      "rule": "Enforce the Agent Rules of decision record 0031-greptile-review-with-repo-cluster-context, supplied as review context. Establish that reviewer configuration stays in-repo at the root only, that no second configuration form or nested .greptile directory appears, that statusCheck stays false, that no decision record is copied into a repository that does not own it, and that any rule citing a record owned by another repository states what must be established without that record's text and does not depend on the repository cluster being present.",
       "scope": [
         ".greptile/**",
         "scripts/adr/**",
         "docs/architecture/decisions/**"
       ],
-      "severity": "high"
-    },
-    {
-      "id": "adr-0030-greptile-review-machine-check-context",
-      "rule": "Enforce the Agent Rules of decision record 0030-greptile-review-machine-check-context, supplied as review context. Establish that a record declaring greptile-review carries a reviewer bullet, one fenced block, an expected result and no reason bullet; that its check establishes the delegation rather than the decision; and that a passing delegating record is never reported as a plain pass.",
-      "scope": ["scripts/adr/**", "docs/architecture/decisions/**"],
       "severity": "high"
     }
   ]
