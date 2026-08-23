@@ -82,7 +82,8 @@ The context names what the check needs, and is exactly one of:
 | `registry-checkout` | the working directory at the root of a `hatch-skills` checkout |
 | `both` | the working directory at the root of a `hatch-cli` checkout, and `$HATCH_REGISTRY` holding the path to a `hatch-skills` checkout |
 | `live-github` | *nothing* — the record asserts live GitHub configuration, which is not in any checkout |
-| `review-only` | *nothing* — establishing the record requires judgment about what code means |
+| `review-only` | *nothing* — establishing the record requires judgment about what code means, and no reviewer performs it |
+| `greptile-review` | the working directory at the root of a `hatch-cli` checkout — the check establishes that the delegation to the reviewer is intact, never that the decision itself holds |
 
 **An executable context** — `cli-repo`, `registry-checkout`, `both` — requires exactly one
 fenced ` ```bash ` block in the section, followed by a line beginning `Expected result:`
@@ -104,6 +105,29 @@ never as passing, so a green run never overstates what was actually checked. A r
 whose check cannot be automated declares that; it does not present a command that appears
 to verify it.
 
+**A delegating context** — `greptile-review` — is for a record whose verification needs
+judgment about what code means *and* which names the reviewer that performs that judgment
+continuously. It requires all of:
+
+- a `- **reviewer:**` bullet naming the judge;
+- exactly one fenced ` ```bash ` block followed by a line beginning `Expected result:`,
+  subject to every rule an executable check is subject to above;
+- prose describing what that reviewer must establish, as a `review-only` record carries.
+
+It carries **no** `- **reason:**` bullet. `reason` exists to say why nothing can verify the
+record; a delegating record has an answer to that, and the reviewer bullet is it.
+
+The check does not establish the decision. It establishes that the delegation is intact —
+that the reviewer's standards still carry a rule bound to this record, that the rule is
+active, and that it names the record. A rule that is missing, inactive, or unbound fails
+the check and blocks the pull request, because a record claiming a judge it no longer has
+reads as covered while being unchecked.
+
+The runner reports a delegating record whose check passes as **`JUDGE`**, counted in its
+own summary bucket — never as `PASS`. The strongest claim such a record supports is that
+the judgment is still being asked for, not that the decision holds. A delegating record
+whose check *fails* is reported `FAIL` and blocks, like any other failing check.
+
 ### Enforcement
 
 One status check, `decision-records`, runs on every pull request in both repositories and
@@ -111,7 +135,7 @@ blocks a failure:
 
 | Runs in | Does |
 |---|---|
-| `hatch-cli` and `hatch-skills` | Verifies the whole record set conforms, then executes every check whose declared context is executable in that repository, reporting per record: passed, failed, unverified (with its reason), skipped as superseded, or deferred to the other repository's run |
+| `hatch-cli` and `hatch-skills` | Verifies the whole record set conforms, then executes every check whose declared context is executable in that repository, reporting per record: passed, failed, unverified (with its reason), delegated to a named reviewer, skipped as superseded, or deferred to the other repository's run |
 
 In `hatch-cli` that job carries one further step. It compares each record's frozen
 sections between the pull request's merge base and its head, keyed on the record's status
@@ -171,3 +195,6 @@ node scripts/adr/check-immutability.mjs --base main
 | 0026 | `0026-git-optional-dependency` | version-control-integration | accepted | [`0026-git-optional-dependency.md`](0026-git-optional-dependency.md) |
 | 0027 | `0027-testing-skill-convention` | skill-registry-group-structure | accepted | [`0027-testing-skill-convention.md`](0027-testing-skill-convention.md) |
 | 0028 | `0028-registry-discovery-live-walk` | registry-discovery | accepted | [`0028-registry-discovery-live-walk.md`](0028-registry-discovery-live-walk.md) |
+| 0029 | `0029-greptile-continuous-review` | continuous-code-review | superseded | [`0029-greptile-continuous-review.md`](0029-greptile-continuous-review.md) |
+| 0030 | `0030-greptile-review-machine-check-context` | decision-record-convention | accepted | [`0030-greptile-review-machine-check-context.md`](0030-greptile-review-machine-check-context.md) |
+| 0031 | `0031-greptile-review-with-repo-cluster-context` | continuous-code-review | accepted | [`0031-greptile-review-with-repo-cluster-context.md`](0031-greptile-review-with-repo-cluster-context.md) |

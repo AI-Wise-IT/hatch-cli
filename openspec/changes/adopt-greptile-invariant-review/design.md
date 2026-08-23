@@ -96,9 +96,9 @@ One entry per accepted record. A conformance check asserts the entry set equals 
 
 ## Risks / Trade-offs
 
-**The documented base for `files.json` paths contradicts its own examples.** The reference states paths resolve relative to the `.greptile/` directory, while every example reads as repository-root-relative. → Resolved empirically on a throwaway pull request before any of the twenty-eight entries are written; whichever base the tool actually uses is the one the generator emits.
+**The documented base for `files.json` paths reads two ways.** The reference states paths resolve relative to the `.greptile/` directory, while every example reads as repository-root-relative. → **Settled: paths resolve relative to the directory *containing* `.greptile/`.** For root-only configuration those two readings are the same thing, so the apparent contradiction dissolves — it is only visible for nested configuration, which this design forbids anyway. Established with `greptile config --json`, which reports all twenty-eight entries resolving from repository-root-relative paths, rather than on a throwaway pull request.
 
-**Cross-repository context may not deliver record *text* to `hatch-skills`.** → If it does not, that repository's rules cite records by permanent URL instead. The no-copy requirement holds either way; what degrades is how much the reviewer can read, not where the source of truth lives.
+**Which cross-repository mechanism delivers record *text* to `hatch-skills`.** → **Settled: a repository cluster does; `context.repos` alone does not.** With `context.repos` naming `AI-Wise-IT/hatch-cli` and no cluster, the reviewer twice reported it could not reach a named record — once unprompted in an ordinary review, once asked directly. With a cluster configured, the same direct question returned 0013's first Agent Rule quoted verbatim, byte-identical to the source. A cluster is dashboard state, so this is a capability no checkout can verify; [0031](../../../docs/architecture/decisions/0031-greptile-review-with-repo-cluster-context.md) supersedes [0029](../../../docs/architecture/decisions/0029-greptile-continuous-review.md) to record that, and requires every cross-repository rule to state what must be established without the record's text so an absent cluster degrades a review visibly rather than silently passing one. The no-copy requirement holds throughout.
 
 **A rule can be scoped to nothing and still pass its delegation check.** Presence and activity are asserted; reach is not. → Accepted deliberately. A check that pins globs needs repair every time the source tree moves, and that maintenance costs more than the drift it catches. Named here so it is a known hole rather than an assumed guarantee.
 
@@ -112,7 +112,7 @@ One entry per accepted record. A conformance check asserts the entry set equals 
 
 Order matters in one place: a delegation check fails unless its rule already exists, so configuration lands before any record is converted.
 
-1. Verify `files.json` path resolution and the cross-repository mechanism empirically, on a throwaway pull request.
+1. Verify `files.json` path resolution and the cross-repository mechanism empirically. The Greptile CLI's `greptile config --json` reports the effective merged configuration for a checkout, which establishes path resolution and rule loading directly; only the cross-repository mechanism still needs a real review to confirm.
 2. Land the contract extension, the runner changes, the helper, and their tests. Every existing record still conforms — nothing declares the new context yet.
 3. Land `.greptile/` in `hatch-cli`, with a rule for every accepted record.
 4. Convert the five records from `review-only` to `greptile-review`.

@@ -70,10 +70,18 @@ None beyond what [0014-registry-collision-detection](0014-registry-collision-det
 
 ## Machine Check
 
-- **context:** review-only
-- **reason:** what this record asserts is that the collision predicate compares *distinct physical source paths* rather than name shape. Its previous check grepped the module for the phrase "distinct physical" — a comment, which passes whether or not the predicate behind it is correct, and fails if a correct implementation is worded differently. The success of that command was unrelated to the property.
+- **context:** greptile-review
+- **reviewer:** Greptile, by the rule `adr-0024-registry-collision-predicate` in `.greptile/config.json`. What this record asserts is that the collision predicate compares *distinct physical source paths* rather than name shape. An earlier check grepped the module for the phrase "distinct physical" — a comment, which passes whether or not the predicate behind it is correct, and fails if a correct implementation is worded differently. The success of that command was unrelated to the property.
 
-A reviewer establishes it by reading `src/registry/collision-check.ts` and confirming that the set it compares is built from:
+The check below establishes only that the delegation is intact — that the rule exists, is active, and names this record. It does not establish the decision.
+
+```bash
+node scripts/adr/greptile-rule.mjs 0024-registry-collision-predicate
+```
+
+Expected result: exit 0, reporting that the rule is active and names this record. A non-zero exit means this record has lost its judge, and the run fails.
+
+The reviewer establishes it by reading `src/registry/collision-check.ts` and confirming that the set it compares is built from:
 
 - each top-level standalone skill folder's own literal name, and
 - each group's nested member folders (`<group>/<member-name>/`), physically inside that group's registry folder;

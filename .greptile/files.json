@@ -1,0 +1,124 @@
+{
+  "files": [
+    {
+      "path": "docs/architecture/decisions/0001-harness-suffix-convention.md",
+      "description": "Harness-targeting via flat, suffixed skill folders — the accepted decision governing skill-registry-harness-targeting. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0002-cli-runtime-nodejs.md",
+      "description": "Hatch CLI runtime: TypeScript on Node.js, npm-distributed — the accepted decision governing cli-runtime. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0003-registry-github-tarball-fetch.md",
+      "description": "Registry fetch model: per-subdirectory GitHub tarball fetch, no local clone or cache — the accepted decision governing registry-data. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0004-github-vcs-platform.md",
+      "description": "Version control platform: GitHub for both repos — the accepted decision governing version-control. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0005-auth-token-env-file-precedence.md",
+      "description": "Registry authentication: token-as-password, env var over home-directory file — the accepted decision governing auth. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0006-npm-public-distribution.md",
+      "description": "CLI distribution: public npm registry, npx as primary invocation — the accepted decision governing cli-distribution. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0007-github-actions-deployment.md",
+      "description": "Deployment/CI-CD: GitHub Actions, tag-triggered npm release — the accepted decision governing deployment. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0008-trunk-based-branch-protection.md",
+      "description": "Branching strategy: trunk-based with required-status-check branch protection — the accepted decision governing branching-strategy. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0009-skill-versioning-semver-tags.md",
+      "description": "Skill/group versioning: semver per folder, CI-enforced bumps, automatic version tags — the accepted decision governing registry-versioning. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0010-manifest-schema-migrations.md",
+      "description": "Manifest schema evolution: versioned field + automatic in-code migration on read — the accepted decision governing data-migrations. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0011-vitest-testing.md",
+      "description": "Testing: Vitest, unit + mocked-integration, no live end-to-end in CI — the accepted decision governing testing. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0012-biome-formal-checks.md",
+      "description": "Formal checks: Biome + tsc, enforced in CI and locally via pre-commit hook — the accepted decision governing formal-checks. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0013-registry-group-structure-and-permanence.md",
+      "description": "Skill-content registry: group structure, pointers, and name permanence — the accepted decision governing skill-registry-group-structure. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0014-registry-collision-detection.md",
+      "description": "Registry collision detection: one CLI-owned check, invoked from both repos — the accepted decision governing registry-collision-detection. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0015-import-harness-selection-flag.md",
+      "description": "Manifest bootstrap: a dedicated `hatch init` command owns initial harness selection — the accepted decision governing manifest-bootstrap. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0016-group-member-manifest-format.md",
+      "description": "Group member-list format: a `members` array on the group's own `skill.json` — the accepted decision governing skill-registry-group-structure. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0017-manifest-schema-v2-group-membership.md",
+      "description": "Manifest schema v2: record group membership per skill, and the group itself, in `hatch.manifest.json` — the accepted decision governing data-migrations. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0018-manifest-content-hash-local-edit-detection.md",
+      "description": "Local-edit detection for re-import: a stored per-skill `contentHash` in the manifest — the accepted decision governing data-migrations. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0019-registry-removed-metadata-flag.md",
+      "description": "Registry \"removed\" metadata flag: a boolean `removed` field on `skill.json` — the accepted decision governing skill-registry-group-structure. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0020-standalone-version-pin-manifest-and-parsing.md",
+      "description": "Standalone version pinning: manifest `pin` field and `<name>@<spec>` argument parsing — the accepted decision governing data-migrations. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0021-block-first-time-import-of-removed-target.md",
+      "description": "Block a first-time import of a removed skill/group; keep every other removed-flag encounter warn-only — the accepted decision governing skill-registry-group-structure. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0022-remove-force-flags-not-prompt.md",
+      "description": "`hatch remove`'s AF-2/AF-3 gating: `--force-all`/`--force-clean` flags, not an interactive prompt — the accepted decision governing cli-remove-command. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0023-remove-harness-drop-unconditional.md",
+      "description": "`hatch remove --harness`'s drop path is unconditional — no drift/local-edit gating — the accepted decision governing cli-remove-command. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0024-registry-collision-predicate.md",
+      "description": "Destination-path collision predicate: distinct physical sources, not name shape — the accepted decision governing registry-collision-detection. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0025-harness-shadowing-risk-accepted.md",
+      "description": "Harness-code shadowing risk: accepted, not engineered against — the accepted decision governing registry-collision-detection. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0026-git-optional-dependency.md",
+      "description": "Git is an optional dependency: Hatch commits when a repository is there, and works without one — the accepted decision governing version-control-integration. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0027-testing-skill-convention.md",
+      "description": "Testing skills: a declared, `_`-prefixed class of registry content that is exempt from name permanence and never importable into an ordinary project — the accepted decision governing skill-registry-group-structure. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0028-registry-discovery-live-walk.md",
+      "description": "Registry discovery: a live walk over the contents API, with descriptions read from wherever each kind of content already keeps its prose — the accepted decision governing registry-discovery. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0030-greptile-review-machine-check-context.md",
+      "description": "Machine-check context `greptile-review`: a record may name its judge, and the runner reports it as delegated — the accepted decision governing decision-record-convention. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0031-greptile-review-with-repo-cluster-context.md",
+      "description": "Continuous code review: Greptile on both repositories, standards in-repo, cross-repository records via a repo cluster — the accepted decision governing continuous-code-review. Enforce what it mandates; do not restate it."
+    }
+  ]
+}
