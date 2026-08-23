@@ -119,12 +119,6 @@
       "severity": "high"
     },
     {
-      "id": "adr-0016-group-member-manifest-format",
-      "rule": "Enforce the Agent Rules of decision record 0016-group-member-manifest-format, supplied as review context. Establish that group parsing and member resolution read the recorded manifest shape, and that this change tolerates no undeclared variant of it.",
-      "scope": ["src/registry/group-resolve.ts", "src/commands/import.ts"],
-      "severity": "high"
-    },
-    {
       "id": "adr-0017-manifest-schema-v2-group-membership",
       "rule": "Enforce the Agent Rules of decision record 0017-manifest-schema-v2-group-membership, supplied as review context. Establish that group membership is recorded in the manifest as that record settles, and that the migration path to it is intact.",
       "scope": ["src/manifest-migrations/index.ts", "src/commands/import.ts"],
@@ -241,6 +235,17 @@
         ".greptile/**",
         "scripts/adr/**",
         "docs/architecture/decisions/**"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "adr-0032-group-pointer-caret-constraint",
+      "rule": "Enforce the Agent Rules of decision record 0032-group-pointer-caret-constraint, supplied as review context. Establish that a group pointer member's version is accepted only as an exact X.Y.Z or a caret ^X.Y.Z and is classified before any fetch, that a caret resolves to the highest published version within its MAJOR at or above its floor and never outside that MAJOR, and that a group re-import resolves its member graph before reporting the project already up to date.",
+      "scope": [
+        "src/registry/semver.ts",
+        "src/registry/group-resolve.ts",
+        "src/registry/fetch.ts",
+        "src/commands/import.ts"
       ],
       "severity": "high"
     }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { compareVersions, isNewerCompatible } from "./semver.js";
+import {
+  compareVersions,
+  isNewerCompatible,
+  parseVersionConstraint,
+} from "./semver.js";
 
 describe("compareVersions", () => {
   it("orders by MAJOR, then MINOR, then PATCH", () => {
@@ -26,5 +30,43 @@ describe("isNewerCompatible", () => {
 
   it("is false when the candidate is older", () => {
     expect(isNewerCompatible("1.5.0", "1.4.0")).toBe(false);
+  });
+});
+
+describe("parseVersionConstraint", () => {
+  it("reads a bare X.Y.Z as an exact pin", () => {
+    expect(parseVersionConstraint("1.2.0")).toEqual({
+      kind: "exact",
+      version: "1.2.0",
+    });
+  });
+
+  it("reads a caret as a MAJOR plus a floor within it", () => {
+    expect(parseVersionConstraint("^1.2.0")).toEqual({
+      kind: "caret",
+      major: 1,
+      floor: "1.2.0",
+    });
+  });
+
+  it("reads a multi-digit MAJOR", () => {
+    expect(parseVersionConstraint("^10.0.0")).toEqual({
+      kind: "caret",
+      major: 10,
+      floor: "10.0.0",
+    });
+  });
+
+  it.each([
+    ["1", "a bare MAJOR"],
+    ["1.0", "a truncated version"],
+    ["^1", "a caret on a bare MAJOR"],
+    ["^1.2", "a caret on a truncated version"],
+    ["~1.2.0", "a tilde range"],
+    ["1.x", "a wildcard"],
+    ["v1.2.0", "a v-prefixed version"],
+    ["", "an empty string"],
+  ])("rejects %s (%s)", (raw) => {
+    expect(parseVersionConstraint(raw)).toBeUndefined();
   });
 });

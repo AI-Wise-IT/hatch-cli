@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./fetch.js", () => ({
   fetchRegistryFile: vi.fn(),
+  fetchPublishedVersions: vi.fn(),
   fetchRegistryFolder: vi.fn(),
 }));
 
-const { fetchRegistryFile, fetchRegistryFolder } = await import("./fetch.js");
+const { fetchRegistryFile, fetchRegistryFolder, fetchPublishedVersions } =
+  await import("./fetch.js");
 const { resolveGroupMembers, parseGroupSkillJson } = await import(
   "./group-resolve.js"
 );
@@ -17,6 +19,7 @@ function skillJson(version: string, members?: unknown[]): string {
 beforeEach(() => {
   vi.mocked(fetchRegistryFile).mockReset();
   vi.mocked(fetchRegistryFolder).mockReset();
+  vi.mocked(fetchPublishedVersions).mockReset();
 });
 
 describe("parseGroupSkillJson", () => {
@@ -422,8 +425,16 @@ describe("resolveGroupMembers — AF-9 pinned-pointer version conflicts", () => 
       "my-group",
       "1.0.0",
       [
-        { kind: "pointer", name: "shared", version: "1.2.0" },
-        { kind: "pointer", name: "shared", version: "1.5.0" },
+        {
+          kind: "pointer",
+          name: "shared",
+          constraint: { kind: "exact", version: "1.2.0" },
+        },
+        {
+          kind: "pointer",
+          name: "shared",
+          constraint: { kind: "exact", version: "1.5.0" },
+        },
       ],
       new Map([["skill.json", skillJson("1.0.0")]]),
     );
@@ -454,8 +465,16 @@ describe("resolveGroupMembers — AF-9 pinned-pointer version conflicts", () => 
       "my-group",
       "1.0.0",
       [
-        { kind: "pointer", name: "shared", version: "1.9.0" },
-        { kind: "pointer", name: "shared", version: "2.0.0" },
+        {
+          kind: "pointer",
+          name: "shared",
+          constraint: { kind: "exact", version: "1.9.0" },
+        },
+        {
+          kind: "pointer",
+          name: "shared",
+          constraint: { kind: "exact", version: "2.0.0" },
+        },
       ],
       new Map([["skill.json", skillJson("1.0.0")]]),
     );
@@ -488,7 +507,11 @@ describe("resolveGroupMembers — AF-9 pinned-pointer version conflicts", () => 
       "1.0.0",
       [
         { kind: "pointer", name: "shared" },
-        { kind: "pointer", name: "shared", version: "1.2.0" },
+        {
+          kind: "pointer",
+          name: "shared",
+          constraint: { kind: "exact", version: "1.2.0" },
+        },
       ],
       new Map([["skill.json", skillJson("1.0.0")]]),
     );

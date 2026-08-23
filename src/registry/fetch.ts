@@ -76,6 +76,92 @@ function decodeFile(entry: ContentsEntry): string {
   return Buffer.from(entry.content ?? "", encoding).toString("utf8");
 }
 
+export interface RegistryVersionsOk {
+  ok: true;
+  // Every version published for the queried name, in the order GitHub
+  // returned its tags — callers order these themselves.
+  versions: string[];
+}
+
+export type RegistryVersionsResult = RegistryVersionsOk | RegistryFetchFailure;
+
+interface GitRef {
+  ref: string;
+}
+
+const REFS_PAGE_SIZE = 100;
+
+// Every `<name>@<version>` tag published for one skill or group
+// (0009-skill-versioning-semver-tags.md), used to resolve a group pointer's
+// caret constraint to a concrete version.
+//
+// Matched by prefix rather than by listing the repository's tags and
+// filtering here: the registry accumulates one tag per version per folder
+// forever, so a full listing would make resolving one member cost a walk of
+// every release the registry has ever cut. The trailing "@" in the prefix
+// is what keeps a query for "brand" from also matching "brand-assets@1.0.0".
+export async function fetchPublishedVersions(
+  token: string,
+  name: string,
+): Promise<RegistryVersionsResult> {
+  const prefix = `${name}@`;
+  const versions: string[] = [];
+
+  for (let page = 1; ; page++) {
+    const url =
+      `https://api.github.com/repos/${REGISTRY_OWNER}/${REGISTRY_REPO}` +
+      `/git/matching-refs/tags/${encodeURIComponent(prefix)}` +
+      `?per_page=${REFS_PAGE_SIZE}&page=${page}`;
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "hatchcli",
+        },
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        reason: "unreachable",
+        detail: `could not reach the registry (${error instanceof Error ? error.message : String(error)})`,
+      };
+    }
+
+    // A prefix matching no tag yields an empty array, not a 404 — but the
+    // endpoint does 404 when the repository itself is unreachable to this
+    // token, which is not the same thing as "this name has no releases".
+    if (response.status === 404) {
+      return {
+        ok: false,
+        reason: "not-found",
+        detail: `the registry has no tag namespace for "${name}"`,
+      };
+    }
+    if (response.status !== 200) {
+      return {
+        ok: false,
+        reason: "unreachable",
+        detail: `the registry responded with an unexpected status (${response.status})`,
+      };
+    }
+
+    const body = (await response.json()) as GitRef[];
+    for (const entry of body) {
+      const tag = entry.ref.replace(/^refs\/tags\//, "");
+      if (tag.startsWith(prefix)) {
+        versions.push(tag.slice(prefix.length));
+      }
+    }
+
+    if (body.length < REFS_PAGE_SIZE) {
+      return { ok: true, versions };
+    }
+  }
+}
+
 export interface RegistryFolderExistsOk {
   ok: true;
   exists: boolean;

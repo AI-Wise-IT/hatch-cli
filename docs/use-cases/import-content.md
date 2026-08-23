@@ -18,7 +18,7 @@
 1. Developer/agent runs `hatch import <skill-or-group-name>[@<version>]` against a target project directory — optionally pinning an exact version (`@1.2.0`) or a range floor (`@^1.2.0`).
 2. System checks whether the target project has a manifest; if not, it aborts and names `hatch init`. It also notes whether the project is a git repository root, warning if it isn't.
 3. System checks for an authenticated session; if none exists, prompts inline for the registry password and authenticates.
-4. System fetches the named skill — or, if it's a group, the whole group atomically — from the registry, at the given version if one was pinned, otherwise at the latest compatible version.
+4. System fetches the named skill — or, if it's a group, the whole group atomically — from the registry, at the given version if one was pinned, otherwise at the latest version the project may auto-apply (AF-1, AF-12).
 5. System checks each destination path the content would occupy is not already taken by something Hatch didn't place there.
 6. System places the content into every harness folder the project declares support for.
 7. System writes/updates the project manifest, recording the skill/group, its version, and its pin state (exact, range, or none).
@@ -31,11 +31,13 @@
 Triggered when the developer re-runs `hatch import` for a skill/group already at the latest compatible version.
 - System reports it's already up to date.
 - No changes are made, no commit is created.
+- For a group, this is established by resolving the member graph and finding that the group's own version, every member's resolved version, and the recorded pin all match what the project already holds. A group's members are resolved before the no-op is reported, never inferred from the group's own version standing still — a caret-constrained member (AF-9) resolves against the registry's current tags and can move while the group does not.
 - Terminates in Success.
 
 ### AF-2: Re-import — update available, no local edits
 Triggered when a newer compatible version exists and the placed content is unmodified since import.
 - System fetches and places the updated content, updates the manifest version, commits, and reports the version change (e.g. "X updated v1 → v2").
+- For a group, "a newer version exists" covers a member that moved on its own: a caret-constrained pointer resolving higher within its MAJOR updates that member even when the group's own version is unchanged, with no edit to the group's content needed to make it happen.
 - Terminates in Success.
 
 ### AF-3: Re-import — local edits present
@@ -79,12 +81,22 @@ Triggered at step 3 when the supplied password is wrong.
 - Developer is informed the password is invalid.
 - Terminates in Failure.
 
-### AF-9: Pinned-pointer version conflict within a group
-Triggered at step 4, while unpacking a group whose members are resolved via pointers (including pointers to other groups, per ADR-0013) — two or more pointer paths reach the same skill name pinned to different versions.
-- If the conflicting pinned versions share the same MAJOR version: system resolves to the highest pinned version and surfaces a warning naming every conflicting pin and which one was used.
+### AF-9: Pointer-constraint version conflict within a group
+Triggered at step 4, while unpacking a group whose members are resolved via pointers (including pointers to other groups, per ADR-0013) — two or more pointer paths reach the same skill name under constraints that resolve to different versions.
+
+A pointer member declares one of three constraints on its `version` (ADR-0032):
+- **none** — resolves to the registry's current published content for that name, across any MAJOR.
+- **exact**, `X.Y.Z` — resolves to exactly that published version.
+- **caret**, `^X.Y.Z` — resolves to the highest published version sharing that MAJOR and at or above that floor, and never into another MAJOR. Aborts the import when no published version satisfies it, naming the member and the constraint.
+
+Any other value is a malformed manifest, rejected while the member list is parsed and before any content is fetched for that member.
+
+Every constraint resolves to a concrete version before conflicts are settled, so the rules below apply to resolved versions rather than to the form each was written in:
+- An unconstrained path expresses no opinion: where another path declares a constraint, that constraint governs and no warning is raised.
+- If the resolved versions share the same MAJOR version: system resolves to the highest and surfaces a warning naming every conflicting constraint and which version was used.
   - The rest of the import proceeds normally; the warning is included in the summary.
   - Terminates in Success alongside the primary outcome.
-- If the conflicting pinned versions differ in MAJOR version: system aborts the entire import — nothing is placed, no manifest change, no commit — reporting the skill name and the conflicting pinned versions.
+- If the resolved versions differ in MAJOR version: system aborts the entire import — nothing is placed, no manifest change, no commit — reporting the skill name and the conflicting constraints.
   - Terminates in Failure.
 
 ### AF-10: Re-import — exactly pinned, update skipped
@@ -103,8 +115,9 @@ Triggered when the developer runs `hatch import <name>@<version>`.
 
 ### AF-12: Import specifies a range/floor version pin
 Triggered when the developer runs `hatch import <name>@^<version>`.
-- System resolves and fetches exactly as it would for an unpinned import (latest compatible, same MAJOR) — the given version records an intentional floor, not a resolution constraint.
+- System resolves and fetches exactly as it would for an unpinned import — the given version records an intentional floor, not a resolution constraint, and is never consulted when resolving.
 - System records the manifest entry as range-pinned at that floor, for visibility, but this does not change update behavior: a range-pinned skill/group continues to auto-update on later re-imports exactly like an unpinned one (AF-2 applies normally).
+- The MAJOR bound on a standalone import comes from the version recorded in the manifest, not from the caret: a re-import auto-applies only a higher MINOR/PATCH of the recorded version's MAJOR, while a **first** import has no recorded version to compare against and takes whatever the registry currently publishes, in any MAJOR. A group's internal caret constraint is the reverse — it carries the MAJOR bound itself, because it has no recorded version to derive one from (AF-9, ADR-0032).
 - Terminates in Success.
 
 ### AF-13: Import target is removed, and has never been imported before
@@ -124,8 +137,9 @@ Triggered at step 4 when the named target — a standalone skill or a group, whi
 - One `hatch import` invocation produces at most one commit, deterministic and reviewable, regardless of how many files or skills it touches (single skill, whole group, or harness backfill).
 - Every reference to committing here applies when the project is a git repository root. Hatch never creates a repository; without one it does the same work, skips the commit, and warns — see [0026-git-optional-dependency](../architecture/decisions/0026-git-optional-dependency.md). The "no changes are made" guarantees hold either way, restored by the command itself rather than by any version-control operation.
 - A group is always fetched and imported as a whole — never one skill out of a group individually.
-- A group's members may be physically part of the group's own folder, or a named pointer to a skill (or another group) living elsewhere in the registry, optionally pinned to an exact version (see ADR-0013). Deployment always unpacks a group into flat, individual entries in the target project — never as one nested group folder.
-- A pinned-pointer version conflict within one import is resolved deterministically, never silently guessed: highest pinned version wins with a warning when the conflicting versions share a MAJOR version; the whole import is blocked otherwise (see AF-9).
+- A group's members may be physically part of the group's own folder, or a named pointer to a skill (or another group) living elsewhere in the registry, optionally carrying an exact-version or caret constraint (see ADR-0013, ADR-0032). Deployment always unpacks a group into flat, individual entries in the target project — never as one nested group folder.
+- A pointer-constraint version conflict within one import is resolved deterministically, never silently guessed: every constraint resolves to a concrete version first, then the highest wins with a warning when those versions share a MAJOR version; the whole import is blocked otherwise (see AF-9).
+- A group's members are resolved on every re-import before the import can report the project already up to date, because a caret-constrained member moves independently of the group's own version (see AF-1, ADR-0032).
 - Placed content is never overwritten if it differs from what was originally imported — a local edit is assumed intentional.
 - Deprecation/removal checks run on every invocation and cover all previously-imported skills/groups, not just the one being acted on.
 - A removed flag warns, never blocks, for anything a project already depends on (AF-4) — but blocks outright a first-time import of the exact named target itself, standalone skill or group (AF-13, see ADR-0021). This distinction does not (yet) extend to a group member discovered removed mid-resolution while the group's own entry is fine — that remains warn-only, pending a registry-side check (not yet built) that a group's current version doesn't depend on a removed skill.
@@ -134,4 +148,4 @@ Triggered at step 4 when the named target — a standalone skill or a group, whi
 - No two skills in the registry may claim the same destination path — that invariant is enforced separately at the registry level (see UC-5 — Prevent destination-path collisions across the registry), using the same resolution logic `hatch import` itself uses (see ADR-0014), not a separate reimplementation. This use case's destination-occupied handling is specifically about a pre-existing, non-Hatch-placed file already sitting at a path, not a registry-level collision.
 - An exact version pin (`<name>@<version>`) is sticky: once recorded, it is respected by every later import touching that skill/group until the developer explicitly re-pins or clears it — the re-import auto-update rule (AF-2) does not apply to a pinned item while the pin stands (see AF-10, AF-11).
 - A range/floor pin (`<name>@^<version>`) records an intentional minimum-version constraint but does not change fetch or update resolution — a range-pinned skill/group auto-updates exactly as an unpinned one does (see AF-12).
-- A standalone skill/group's own version pin (AF-10 through AF-12) is a distinct mechanism from a group's internal pointer-member version pin (AF-9, see [0013-registry-group-structure-and-permanence](../architecture/decisions/0013-registry-group-structure-and-permanence.md) and [0016-group-member-manifest-format](../architecture/decisions/0016-group-member-manifest-format.md)): a group member's pin is resolved fresh every time that group is unpacked and is never recorded as a persistent, sticky commitment in the target project's manifest — only a standalone import's own pin persists.
+- A standalone skill/group's own version pin (AF-10 through AF-12) is a distinct mechanism from a group's internal pointer-member constraint (AF-9, see [0013-registry-group-structure-and-permanence](../architecture/decisions/0013-registry-group-structure-and-permanence.md) and [0032-group-pointer-caret-constraint](../architecture/decisions/0032-group-pointer-caret-constraint.md)): a group member's constraint is resolved fresh every time that group is unpacked and is never recorded as a persistent, sticky commitment in the target project's manifest — only a standalone import's own pin persists.
