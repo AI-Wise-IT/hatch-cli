@@ -81,13 +81,19 @@ The no-op half of this record was forced by implementation. The group-level AF-1
 
 - **context:** cli-repo
 
-The grammar and resolution rules above are behavioral, so the check executes the suites that assert them: the constraint grammar and caret resolution in `src/registry`, and the group re-import no-op decision in `src/commands`. A regression in any Agent Rule above fails at least one of these.
+The `decision-records` job checks out this repository without installing dependencies, so the check reads source rather than running the test suite. It asserts the three structural facts the Agent Rules rest on, each of which fails loudly if the corresponding rule is abandoned.
 
 ```bash
-npx vitest run src/registry/semver.test.ts src/registry/group-resolve-constraints.test.ts src/commands/import.test.ts
+grep -q "EXACT_VERSION = .*\$/" src/registry/semver.ts || { echo "VIOLATION: the constraint grammar is not anchored"; exit 1; }
+grep -q "triple\[0\] === constraint.major" src/registry/semver.ts || { echo "VIOLATION: caret resolution is not bound to its MAJOR"; exit 1; }
+grep -q "hashFromDisk" src/commands/import.ts && { echo "VIOLATION: drift detection hashes an incoming file list"; exit 1; }
+test "$(grep -c "hashDiskTree(" src/commands/import.ts)" = "2" || { echo "VIOLATION: both drift checks must hash the on-disk tree"; exit 1; }
+echo "grammar anchored, caret bound to its MAJOR, drift hashed from disk: correct"
 ```
 
-Expected result: all three files pass, exit 0. A change that widens the accepted grammar, lets a caret cross a MAJOR, drops the floor check, or restores the pre-resolution group no-op fails at least one assertion and exits non-zero.
+Expected result: the confirmation line, exit 0.
+
+Each assertion is tied to behavior rather than to a comment. Unanchoring `EXACT_VERSION` is exactly how `1.x` or `v1.2.0` would start being accepted as a version. Dropping the `triple[0] === constraint.major` comparison is exactly how a caret would begin resolving outside its MAJOR. And `hashFromDisk` reappearing in `import.ts`, or either `hashDiskTree` call site being lost, is exactly the regression that reports a local edit nobody made. The behavioral assertions themselves live in `src/registry/semver.test.ts`, `src/registry/group-resolve-constraints.test.ts` and `src/commands/import.test.ts`, which the `checks` job runs with dependencies installed.
 
 ## Precedence
 
