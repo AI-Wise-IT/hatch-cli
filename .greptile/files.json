@@ -61,10 +61,6 @@
       "description": "Manifest bootstrap: a dedicated `hatch init` command owns initial harness selection — the accepted decision governing manifest-bootstrap. Enforce what it mandates; do not restate it."
     },
     {
-      "path": "docs/architecture/decisions/0016-group-member-manifest-format.md",
-      "description": "Group member-list format: a `members` array on the group's own `skill.json` — the accepted decision governing skill-registry-group-structure. Enforce what it mandates; do not restate it."
-    },
-    {
       "path": "docs/architecture/decisions/0017-manifest-schema-v2-group-membership.md",
       "description": "Manifest schema v2: record group membership per skill, and the group itself, in `hatch.manifest.json` — the accepted decision governing data-migrations. Enforce what it mandates; do not restate it."
     },
@@ -119,6 +115,10 @@
     {
       "path": "docs/architecture/decisions/0031-greptile-review-with-repo-cluster-context.md",
       "description": "Continuous code review: Greptile on both repositories, standards in-repo, cross-repository records via a repo cluster — the accepted decision governing continuous-code-review. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0032-group-pointer-caret-constraint.md",
+      "description": "Group pointer version constraints: exact pin or caret, resolved before a no-op — the accepted decision governing skill-registry-group-structure. Enforce what it mandates; do not restate it."
     }
   ]
 }

@@ -38,8 +38,8 @@ import {
   resolveSkillFolderName,
 } from "../harness-registry.js";
 import {
+  hashDiskTree,
   hashEntries,
-  hashFromDisk,
 } from "../manifest-migrations/content-hash.js";
 import { migrateManifest } from "../manifest-migrations/index.js";
 import {
@@ -532,23 +532,20 @@ export async function runImport(argv: string[]): Promise<number> {
     if (meta.members) {
       isGroup = true;
 
-      // AF-1/AF-2 version gate at the group level: skip the whole
-      // fetch/resolve when this isn't an exact-pin request and the group
-      // is already at the latest compatible version — a group version
-      // bump is required (CI-enforced, ADR-0009) for its member list to
-      // change at all, so an unchanged group version means nothing about
-      // its members changed either.
+      // AF-1/AF-2 at the group level is decided *after* resolution, not
+      // before it. An unchanged group version used to imply nothing about
+      // its members had changed, because every member resolved to either a
+      // fixed pin or whatever the group's own version carried. A
+      // caret-constrained pointer breaks that implication: it resolves
+      // against the registry's current tags, so a member can move while the
+      // group itself stands still. The only way to know whether anything
+      // changed is to resolve the member graph and compare.
       if (
         spec.kind !== "exact" &&
         existingEntry &&
-        !isNewerCompatible(existingEntry.version, meta.version)
+        !isNewerCompatible(existingEntry.version, meta.version) &&
+        !pinsEqual(newPin, existingEntry.pin)
       ) {
-        if (pinsEqual(newPin, existingEntry.pin)) {
-          console.log(
-            `hatch import: "${name}" is already up to date (v${existingEntry.version}).`,
-          );
-          return 0;
-        }
         pinOnlyChange = true;
       } else {
         rootGroupVersion = meta.version;
@@ -590,7 +587,15 @@ export async function runImport(argv: string[]): Promise<number> {
               getHarnessDefinition(primaryHarness).skillsDir,
               member.name,
             );
-            const onDiskHash = hashFromDisk(memberDir, member.files.keys());
+            // Hashed from what is actually on disk, never from the incoming
+            // version's file list: the stored hash was computed from the
+            // files the *previous* version placed, so hashing the new
+            // version's list against the old tree compares two different
+            // file sets. A file the new version adds does not exist on disk
+            // yet and would hash as empty, reporting a local edit nobody
+            // made — and then repeating it on every later import, because
+            // the update it blocks is what would have placed the file.
+            const onDiskHash = hashDiskTree(memberDir);
             if (onDiskHash !== memberEntry.contentHash) {
               skippedLocalEdits.push(member.name);
               continue;
@@ -605,6 +610,26 @@ export async function runImport(argv: string[]): Promise<number> {
             ),
             isUpdate,
           });
+        }
+
+        // The no-op half of AF-1, now decided on evidence: the group sits
+        // at its recorded version, no pin changed, and every member
+        // resolved to exactly what the project already has. Local edits
+        // disqualify the shortcut so the normal path can report them.
+        if (
+          spec.kind !== "exact" &&
+          existingEntry &&
+          !isNewerCompatible(existingEntry.version, meta.version) &&
+          pinsEqual(newPin, existingEntry.pin) &&
+          skippedLocalEdits.length === 0 &&
+          placementTargets.every(
+            (target) => existingSkills[target.name]?.version === target.version,
+          )
+        ) {
+          console.log(
+            `hatch import: "${name}" is already up to date (v${existingEntry.version}).`,
+          );
+          return 0;
         }
       }
     }
@@ -703,10 +728,10 @@ export async function runImport(argv: string[]): Promise<number> {
           getHarnessDefinition(primaryHarness).skillsDir,
           name,
         );
-        const relativePaths = [...primaryFiles.keys()].filter(
-          (p) => !isRegistryOnlyFile(p),
-        );
-        const onDiskHash = hashFromDisk(skillDir, relativePaths);
+        // Same reasoning as the group-member check above: compare what is
+        // on disk against what was recorded, not the incoming version's
+        // file list against the previous version's hash.
+        const onDiskHash = hashDiskTree(skillDir);
         if (onDiskHash !== existingEntry.contentHash) {
           console.log(
             `hatch import: "${name}" has local edits — left untouched.`,

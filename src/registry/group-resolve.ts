@@ -9,8 +9,17 @@
 // the pins share a MAJOR version, or aborts the whole resolution when they
 // don't.
 
-import { fetchRegistryFile, fetchRegistryFolder } from "./fetch.js";
+import {
+  fetchPublishedVersions,
+  fetchRegistryFile,
+  fetchRegistryFolder,
+} from "./fetch.js";
 import { REGISTRY_ONLY_FILES } from "./registry-only-files.js";
+import {
+  type VersionConstraint,
+  parseVersionConstraint,
+  resolveCaretConstraint,
+} from "./semver.js";
 import { declaresTesting, isTestingSkillName } from "./testing-skill.js";
 
 export interface NestedMemberSpec {
@@ -21,7 +30,10 @@ export interface NestedMemberSpec {
 export interface PointerMemberSpec {
   kind: "pointer";
   name: string;
-  version?: string;
+  // Classified at parse time rather than carried as a raw string: an
+  // unrecognized value is a malformed manifest, and catching it here is
+  // what stops it becoming a git ref nobody meant to request.
+  constraint?: VersionConstraint;
 }
 
 export type MemberSpec = NestedMemberSpec | PointerMemberSpec;
@@ -142,6 +154,12 @@ function parseMemberSpec(
         `"${folderLabel}"'s members[${index}] (kind "nested") must have a non-empty "name"`,
       );
     }
+    if (entry.version !== undefined) {
+      throw new GroupResolveError(
+        "invalid-members",
+        `"${folderLabel}"'s members[${index}] (kind "nested") must not declare a "version" — nested content ships inside the group at the group's own version`,
+      );
+    }
     return { kind: "nested", name: entry.name };
   }
 
@@ -158,10 +176,20 @@ function parseMemberSpec(
         `"${folderLabel}"'s members[${index}] "version" must be a string when present`,
       );
     }
+    let constraint: VersionConstraint | undefined;
+    if (typeof entry.version === "string") {
+      constraint = parseVersionConstraint(entry.version);
+      if (!constraint) {
+        throw new GroupResolveError(
+          "invalid-members",
+          `"${folderLabel}"'s members[${index}] has an unrecognized "version" (${JSON.stringify(entry.version)}) — use an exact "X.Y.Z" or a caret "^X.Y.Z"`,
+        );
+      }
+    }
     return {
       kind: "pointer",
       name: entry.name,
-      version: entry.version as string | undefined,
+      constraint,
     };
   }
 
@@ -228,6 +256,54 @@ interface WalkState {
   // First-resolved nested-member content, keyed by name — dedup gives
   // nested members priority over a same-named pointer encountered later.
   nestedSources: Map<string, { files: Map<string, string>; version: string }>;
+  // Published-version lists, keyed by name, for the life of one resolution
+  // run: a name reached by several caret-constrained pointer paths costs
+  // one tag query, not one per path.
+  publishedVersions: Map<string, string[]>;
+}
+
+// Reduces one pointer's declared constraint to a concrete published
+// version, so that everything downstream — dedup, conflict reconciliation,
+// the eventual fetch — works on concrete versions and needs no knowledge of
+// which form the group declared. An unconstrained pointer stays undefined,
+// which is what lets it express no opinion during reconciliation.
+async function resolveConstraintToVersion(
+  state: WalkState,
+  name: string,
+  constraint: VersionConstraint | undefined,
+): Promise<string | undefined> {
+  if (!constraint) {
+    return undefined;
+  }
+  if (constraint.kind === "exact") {
+    return constraint.version;
+  }
+
+  let published = state.publishedVersions.get(name);
+  if (!published) {
+    const result = await fetchPublishedVersions(state.token, name);
+    if (!result.ok) {
+      throw new GroupResolveError(
+        result.reason === "not-found" ? "not-found" : "unreachable",
+        result.detail,
+      );
+    }
+    published = result.versions;
+    state.publishedVersions.set(name, published);
+  }
+
+  const resolved = resolveCaretConstraint(constraint, published);
+  if (!resolved) {
+    const known =
+      published.length === 0
+        ? "the registry publishes no versions for that name"
+        : `published versions are ${[...published].sort(compareSemver).join(", ")}`;
+    throw new GroupResolveError(
+      "not-found",
+      `"${name}" has no published version satisfying "^${constraint.floor}" — ${known}`,
+    );
+  }
+  return resolved;
 }
 
 async function walk(
@@ -262,8 +338,14 @@ async function walk(
     if (state.leafClassified.has(name)) {
       // Already known to be a leaf skill — just record this additional pin
       // for AF-9 conflict detection; the winning version is resolved once
-      // the whole graph has been walked.
-      state.leafPinRequests.get(name)?.push(member.version);
+      // the whole graph has been walked. Safe to resolve a constraint here
+      // without re-running the testing-name check: reaching this branch
+      // means the name already passed it on first encounter.
+      state.leafPinRequests
+        .get(name)
+        ?.push(
+          await resolveConstraintToVersion(state, name, member.constraint),
+        );
       continue;
     }
 
@@ -279,7 +361,12 @@ async function walk(
       );
     }
 
-    const ref = member.version ? `${name}@${member.version}` : undefined;
+    const resolvedVersion = await resolveConstraintToVersion(
+      state,
+      name,
+      member.constraint,
+    );
+    const ref = resolvedVersion ? `${name}@${resolvedVersion}` : undefined;
     const skillJsonResult = await fetchRegistryFile(
       state.token,
       `${name}/skill.json`,
@@ -316,7 +403,7 @@ async function walk(
       await walk(state, meta.members, meta.version, groupFetch.files);
     } else {
       state.leafClassified.add(name);
-      state.leafPinRequests.set(name, [member.version]);
+      state.leafPinRequests.set(name, [resolvedVersion]);
     }
   }
 }
@@ -340,6 +427,7 @@ export async function resolveGroupMembers(
     leafPinRequests: new Map(),
     leafClassified: new Set(),
     nestedSources: new Map(),
+    publishedVersions: new Map(),
   };
 
   try {

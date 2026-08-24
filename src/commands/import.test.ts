@@ -25,6 +25,7 @@ vi.mock("../cli/prompt.js", () => ({
 vi.mock("../registry/fetch.js", () => ({
   fetchRegistryFile: vi.fn(),
   fetchRegistryFolder: vi.fn(),
+  fetchPublishedVersions: vi.fn(),
   registryFolderExists: vi.fn(),
 }));
 // Wraps the real simpleGit so tests exercise real git plumbing by default;
@@ -39,8 +40,12 @@ const { resolveToken, writeCredentials } = await import(
 );
 const { validateGitHubToken } = await import("../auth/github-token.js");
 const { promptHidden, promptLine } = await import("../cli/prompt.js");
-const { fetchRegistryFile, fetchRegistryFolder, registryFolderExists } =
-  await import("../registry/fetch.js");
+const {
+  fetchRegistryFile,
+  fetchRegistryFolder,
+  registryFolderExists,
+  fetchPublishedVersions,
+} = await import("../registry/fetch.js");
 const { simpleGit } = await import("simple-git");
 const { runImport } = await import("./import.js");
 
@@ -128,6 +133,7 @@ beforeEach(async () => {
       ok: true,
       exists: name === "example-skill",
     }));
+  vi.mocked(fetchPublishedVersions).mockReset();
   vi.mocked(fetchRegistryFolder).mockReset().mockResolvedValue({
     ok: true,
     files: skillFiles(),
@@ -2175,5 +2181,422 @@ describe("runImport — --add-harness in a test project (0027)", () => {
     // The opt-in survives the manifest rewrite, so the next import still works.
     expect(readManifest().testProject).toBe(true);
     expect(readManifest().harnesses).toEqual(["claude", "codex"]);
+  });
+});
+
+describe("runImport — caret-constrained group pointer", () => {
+  function groupWithCaret(floor: string): string {
+    return groupSkillJson("1.0.0", [
+      { kind: "pointer", name: "shared", version: `^${floor}` },
+    ]);
+  }
+
+  // A group whose sole member is a caret-constrained pointer at `shared`,
+  // which the registry serves at `leafVersion`.
+  function mockCaretGroup(groupJson: string, leafVersion: string) {
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "my-group/skill.json") {
+        return { ok: true, content: groupJson };
+      }
+      if (path === "shared/skill.json") {
+        return { ok: true, content: plainSkillJson(leafVersion) };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(async (_token, name) => {
+      if (name === "my-group") {
+        return { ok: true, files: new Map([["skill.json", groupJson]]) };
+      }
+      if (name === "shared") {
+        return {
+          ok: true,
+          files: new Map([
+            ["skill.json", plainSkillJson(leafVersion)],
+            ["SKILL.md", "# shared"],
+          ]),
+        };
+      }
+      throw new Error(`unexpected fetch of ${name}`);
+    });
+  }
+
+  it("places the version the caret resolved to and names it in the summary", async () => {
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0", "1.3.0", "2.0.0"],
+    });
+    mockCaretGroup(groupWithCaret("1.0.0"), "1.3.0");
+    seedManifest(["claude"]);
+
+    const exitCode = await runImport(["my-group", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(readManifest().skills.shared.version).toBe("1.3.0");
+    expect(consoleLogs.join("\n")).toContain("v1.3.0");
+  });
+
+  it("surfaces the conflicting-constraint warning naming both and the version used", async () => {
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.2.0", "1.4.0"],
+    });
+    const groupJson = groupSkillJson("1.0.0", [
+      { kind: "pointer", name: "shared", version: "1.2.0" },
+      { kind: "pointer", name: "shared", version: "^1.0.0" },
+    ]);
+    mockCaretGroup(groupJson, "1.4.0");
+    seedManifest(["claude"]);
+
+    const exitCode = await runImport(["my-group", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    const output = consoleLogs.join("\n");
+    expect(output).toContain("warning");
+    expect(output).toContain("1.2.0");
+    expect(output).toContain("1.4.0");
+  });
+
+  it("aborts an unsatisfiable caret without touching the project", async () => {
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["2.0.0", "3.0.0"],
+    });
+    mockCaretGroup(groupWithCaret("1.0.0"), "1.0.0");
+    seedManifest(["claude"]);
+    const before = await commitCount(target);
+
+    const exitCode = await runImport(["my-group", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expect(consoleErrors.join("\n")).toContain("^1.0.0");
+    expect(existsSync(join(target, ".claude", "skills", "shared"))).toBe(false);
+    expectManifestUnchanged();
+    expect(await commitCount(target)).toBe(before);
+  });
+
+  it("re-resolves the caret on re-import and records no pin for the member", async () => {
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0", "1.3.0"],
+    });
+    mockCaretGroup(groupWithCaret("1.0.0"), "1.3.0");
+    seedManifest(["claude"]);
+
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+    expect(readManifest().skills.shared.version).toBe("1.3.0");
+    expect(readManifest().skills.shared.pin).toBeUndefined();
+
+    // A newer version lands inside the same MAJOR; the group's own content
+    // is untouched, so only a fresh resolution can pick it up.
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0", "1.3.0", "1.4.0"],
+    });
+    mockCaretGroup(groupWithCaret("1.0.0"), "1.4.0");
+
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+    expect(readManifest().skills.shared.version).toBe("1.4.0");
+    expect(readManifest().skills.shared.pin).toBeUndefined();
+  });
+});
+
+describe("runImport — group re-import resolves before declaring a no-op", () => {
+  function caretGroupJson(): string {
+    return groupSkillJson("1.0.0", [
+      { kind: "pointer", name: "shared", version: "^1.0.0" },
+    ]);
+  }
+
+  function mockCaretGroup(leafVersion: string) {
+    const groupJson = caretGroupJson();
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "my-group/skill.json") {
+        return { ok: true, content: groupJson };
+      }
+      if (path === "shared/skill.json") {
+        return { ok: true, content: plainSkillJson(leafVersion) };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(async (_token, name) => {
+      if (name === "my-group") {
+        return { ok: true, files: new Map([["skill.json", groupJson]]) };
+      }
+      if (name === "shared") {
+        return {
+          ok: true,
+          files: new Map([
+            ["skill.json", plainSkillJson(leafVersion)],
+            ["SKILL.md", "# shared"],
+          ]),
+        };
+      }
+      throw new Error(`unexpected fetch of ${name}`);
+    });
+  }
+
+  it("reports up to date with no manifest change and no commit when nothing moved", async () => {
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0", "1.3.0"],
+    });
+    mockCaretGroup("1.3.0");
+    seedManifest(["claude"]);
+
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+    const manifestBefore = readFileSync(
+      join(target, "hatch.manifest.json"),
+      "utf8",
+    );
+    const commitsBefore = await commitCount(target);
+
+    consoleLogs.length = 0;
+    const exitCode = await runImport(["my-group", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs.some((m) => m.includes("already up to date"))).toBe(
+      true,
+    );
+    expect(readFileSync(join(target, "hatch.manifest.json"), "utf8")).toBe(
+      manifestBefore,
+    );
+    expect(await commitCount(target)).toBe(commitsBefore);
+  });
+
+  it("still resolves the member graph before saying so", async () => {
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0", "1.3.0"],
+    });
+    mockCaretGroup("1.3.0");
+    seedManifest(["claude"]);
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+
+    vi.mocked(fetchPublishedVersions).mockClear();
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+
+    // The point of option 2: the no-op is a conclusion drawn from a real
+    // resolution, not an assumption made from the group's own version.
+    expect(fetchPublishedVersions).toHaveBeenCalled();
+  });
+});
+
+describe("runImport — caret auto-update keeps contentHash coherent", () => {
+  // A group whose sole member is a caret pointer at `shared`, served at
+  // `leafVersion` with `leafFiles` as its content.
+  function mockCaretGroup(
+    leafVersion: string,
+    leafFiles: Array<[string, string]>,
+  ) {
+    const groupJson = groupSkillJson("1.0.0", [
+      { kind: "pointer", name: "shared", version: "^1.0.0" },
+    ]);
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) => {
+      if (path === "my-group/skill.json") {
+        return { ok: true, content: groupJson };
+      }
+      if (path === "shared/skill.json") {
+        return { ok: true, content: plainSkillJson(leafVersion) };
+      }
+      return { ok: false, reason: "not-found", detail: "not found" };
+    });
+    vi.mocked(fetchRegistryFolder).mockImplementation(async (_token, name) => {
+      if (name === "my-group") {
+        return { ok: true, files: new Map([["skill.json", groupJson]]) };
+      }
+      if (name === "shared") {
+        return {
+          ok: true,
+          files: new Map([
+            ["skill.json", plainSkillJson(leafVersion)],
+            ...leafFiles,
+          ]),
+        };
+      }
+      throw new Error(`unexpected fetch of ${name}`);
+    });
+  }
+
+  it("rewrites the member's contentHash when a caret update changes file content", async () => {
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0"],
+    });
+    mockCaretGroup("1.0.0", [["SKILL.md", "# v1"]]);
+    seedManifest(["claude"]);
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+    const firstHash = readManifest().skills.shared.contentHash;
+
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0", "1.0.1"],
+    });
+    mockCaretGroup("1.0.1", [["SKILL.md", "# v2"]]);
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+
+    expect(readManifest().skills.shared.version).toBe("1.0.1");
+    expect(readManifest().skills.shared.contentHash).not.toBe(firstHash);
+    expect(readManifest().skills.shared.contentHash).toBe(
+      hashEntries([["SKILL.md", "# v2"]]),
+    );
+  });
+
+  it("does not falsely report local edits on the import after a caret update", async () => {
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0"],
+    });
+    mockCaretGroup("1.0.0", [["SKILL.md", "# v1"]]);
+    seedManifest(["claude"]);
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0", "1.0.1"],
+    });
+    mockCaretGroup("1.0.1", [["SKILL.md", "# v2"]]);
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+
+    // Third run, nothing new published: the stored hash must still match
+    // what is on disk, or drift detection fires on content Hatch itself
+    // placed.
+    consoleLogs.length = 0;
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+    expect(consoleLogs.join("\n")).not.toContain("local edits");
+    expect(consoleLogs.some((m) => m.includes("already up to date"))).toBe(
+      true,
+    );
+  });
+
+  it("does not falsely report local edits when a caret update adds a file", async () => {
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0"],
+    });
+    mockCaretGroup("1.0.0", [["SKILL.md", "# v1"]]);
+    seedManifest(["claude"]);
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+
+    // 1.0.1 ships an extra file the placed 1.0.0 never had.
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0", "1.0.1"],
+    });
+    mockCaretGroup("1.0.1", [
+      ["SKILL.md", "# v1"],
+      ["reference/extra.md", "# extra"],
+    ]);
+    consoleLogs.length = 0;
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+
+    expect(consoleLogs.join("\n")).not.toContain("local edits");
+    expect(readManifest().skills.shared.version).toBe("1.0.1");
+    expect(
+      existsSync(
+        join(target, ".claude", "skills", "shared", "reference", "extra.md"),
+      ),
+    ).toBe(true);
+  });
+
+  it("still detects a genuine local edit made after a caret update", async () => {
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0", "1.0.1"],
+    });
+    mockCaretGroup("1.0.1", [["SKILL.md", "# v2"]]);
+    seedManifest(["claude"]);
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+
+    writeFileSync(
+      join(target, ".claude", "skills", "shared", "SKILL.md"),
+      "# hand-edited",
+      "utf8",
+    );
+
+    vi.mocked(fetchPublishedVersions).mockResolvedValue({
+      ok: true,
+      versions: ["1.0.0", "1.0.1", "1.0.2"],
+    });
+    mockCaretGroup("1.0.2", [["SKILL.md", "# v3"]]);
+    consoleLogs.length = 0;
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+
+    expect(consoleLogs.join("\n")).toContain("local edits");
+    expect(
+      readFileSync(
+        join(target, ".claude", "skills", "shared", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe("# hand-edited");
+  });
+});
+
+describe("runImport — a version that changes its file list is not a local edit", () => {
+  function mockStandaloneWithFiles(
+    version: string,
+    files: Array<[string, string]>,
+  ) {
+    vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) =>
+      path === "example-skill/skill.json"
+        ? { ok: true, content: plainSkillJson(version) }
+        : { ok: false, reason: "not-found", detail: "not found" },
+    );
+    vi.mocked(fetchRegistryFolder).mockImplementation(async () => ({
+      ok: true,
+      files: new Map([["skill.json", plainSkillJson(version)], ...files]),
+    }));
+  }
+
+  it("updates a standalone skill whose new version adds a file", async () => {
+    mockStandaloneWithFiles("1.0.0", [["SKILL.md", "# v1"]]);
+    seedManifest(["claude"]);
+    expect(await runImport(["example-skill", "--path", target])).toBe(0);
+
+    mockStandaloneWithFiles("1.1.0", [
+      ["SKILL.md", "# v1"],
+      ["reference/extra.md", "# extra"],
+    ]);
+    consoleLogs.length = 0;
+    expect(await runImport(["example-skill", "--path", target])).toBe(0);
+
+    expect(consoleLogs.join("\n")).not.toContain("local edits");
+    expect(readManifest().skills["example-skill"].version).toBe("1.1.0");
+    expect(
+      existsSync(
+        join(
+          target,
+          ".claude",
+          "skills",
+          "example-skill",
+          "reference",
+          "extra.md",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("updates a standalone skill whose new version drops a file, and stays clean afterwards", async () => {
+    mockStandaloneWithFiles("1.0.0", [
+      ["SKILL.md", "# v1"],
+      ["reference/old.md", "# old"],
+    ]);
+    seedManifest(["claude"]);
+    expect(await runImport(["example-skill", "--path", target])).toBe(0);
+
+    mockStandaloneWithFiles("1.1.0", [["SKILL.md", "# v1"]]);
+    consoleLogs.length = 0;
+    expect(await runImport(["example-skill", "--path", target])).toBe(0);
+    expect(consoleLogs.join("\n")).not.toContain("local edits");
+    expect(readManifest().skills["example-skill"].version).toBe("1.1.0");
+
+    // The import after a file-dropping update must still read as clean:
+    // whatever the update left on disk has to agree with the hash it
+    // recorded, or drift fires on Hatch's own handiwork.
+    consoleLogs.length = 0;
+    expect(await runImport(["example-skill", "--path", target])).toBe(0);
+    expect(consoleLogs.join("\n")).not.toContain("local edits");
+    expect(consoleLogs.some((m) => m.includes("already up to date"))).toBe(
+      true,
+    );
   });
 });

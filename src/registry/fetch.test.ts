@@ -2,6 +2,7 @@ import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
+  fetchPublishedVersions,
   fetchRegistryFile,
   fetchRegistryFolder,
   listRegistryRoot,
@@ -347,5 +348,94 @@ describe("registryFolderExists", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure result");
     expect(result.reason).toBe("unreachable");
+  });
+});
+
+const REFS_BASE =
+  "https://api.github.com/repos/AI-Wise-IT/hatch-skills/git/matching-refs/tags";
+
+function tagRefs(name: string, versions: string[]) {
+  return versions.map((v) => ({
+    ref: `refs/tags/${name}@${v}`,
+    object: { sha: "deadbeef", type: "commit" },
+  }));
+}
+
+describe("fetchPublishedVersions", () => {
+  it("returns every published version for the name", async () => {
+    server.use(
+      http.get(`${REFS_BASE}/:prefix`, ({ request, params }) => {
+        expect(request.headers.get("authorization")).toBe("Bearer good-token");
+        expect(params.prefix).toBe("demo-skill@");
+        return HttpResponse.json(
+          tagRefs("demo-skill", ["1.0.0", "1.1.0", "2.0.0"]),
+        );
+      }),
+    );
+
+    const result = await fetchPublishedVersions("good-token", "demo-skill");
+
+    expect(result).toEqual({
+      ok: true,
+      versions: ["1.0.0", "1.1.0", "2.0.0"],
+    });
+  });
+
+  it("returns an empty list for a name with no published tags", async () => {
+    server.use(http.get(`${REFS_BASE}/:prefix`, () => HttpResponse.json([])));
+
+    const result = await fetchPublishedVersions("good-token", "never-released");
+
+    expect(result).toEqual({ ok: true, versions: [] });
+  });
+
+  it("does not match a longer name sharing the queried name's prefix", async () => {
+    server.use(
+      http.get(`${REFS_BASE}/:prefix`, () =>
+        HttpResponse.json([
+          ...tagRefs("brand", ["1.0.0"]),
+          {
+            ref: "refs/tags/brand-assets@9.9.9",
+            object: { sha: "d", type: "commit" },
+          },
+        ]),
+      ),
+    );
+
+    const result = await fetchPublishedVersions("good-token", "brand");
+
+    expect(result).toEqual({ ok: true, versions: ["1.0.0"] });
+  });
+
+  it("follows pagination until a short page and returns the complete set", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, i) => `1.0.${i}`);
+    server.use(
+      http.get(`${REFS_BASE}/:prefix`, ({ request }) => {
+        const page = new URL(request.url).searchParams.get("page");
+        if (page === "1") {
+          return HttpResponse.json(tagRefs("big-skill", firstPage));
+        }
+        return HttpResponse.json(tagRefs("big-skill", ["1.1.0"]));
+      }),
+    );
+
+    const result = await fetchPublishedVersions("good-token", "big-skill");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.versions).toHaveLength(101);
+      expect(result.versions.at(-1)).toBe("1.1.0");
+    }
+  });
+
+  it("reports an unreachable registry rather than an empty release history", async () => {
+    server.use(http.get(`${REFS_BASE}/:prefix`, () => HttpResponse.error()));
+
+    const result = await fetchPublishedVersions("good-token", "demo-skill");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("unreachable");
+    }
   });
 });

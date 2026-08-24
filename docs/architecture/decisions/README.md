@@ -182,7 +182,7 @@ node scripts/adr/check-immutability.mjs --base main
 | 0013 | `0013-registry-group-structure-and-permanence` | skill-registry-group-structure | accepted | [`0013-registry-group-structure-and-permanence.md`](0013-registry-group-structure-and-permanence.md) |
 | 0014 | `0014-registry-collision-detection` | registry-collision-detection | accepted | [`0014-registry-collision-detection.md`](0014-registry-collision-detection.md) |
 | 0015 | `0015-import-harness-selection-flag` | manifest-bootstrap | accepted | [`0015-import-harness-selection-flag.md`](0015-import-harness-selection-flag.md) |
-| 0016 | `0016-group-member-manifest-format` | skill-registry-group-structure | accepted | [`0016-group-member-manifest-format.md`](0016-group-member-manifest-format.md) |
+| 0016 | `0016-group-member-manifest-format` | skill-registry-group-structure | superseded | [`0016-group-member-manifest-format.md`](0016-group-member-manifest-format.md) |
 | 0017 | `0017-manifest-schema-v2-group-membership` | data-migrations | accepted | [`0017-manifest-schema-v2-group-membership.md`](0017-manifest-schema-v2-group-membership.md) |
 | 0018 | `0018-manifest-content-hash-local-edit-detection` | data-migrations | accepted | [`0018-manifest-content-hash-local-edit-detection.md`](0018-manifest-content-hash-local-edit-detection.md) |
 | 0019 | `0019-registry-removed-metadata-flag` | skill-registry-group-structure | accepted | [`0019-registry-removed-metadata-flag.md`](0019-registry-removed-metadata-flag.md) |
@@ -198,3 +198,4 @@ node scripts/adr/check-immutability.mjs --base main
 | 0029 | `0029-greptile-continuous-review` | continuous-code-review | superseded | [`0029-greptile-continuous-review.md`](0029-greptile-continuous-review.md) |
 | 0030 | `0030-greptile-review-machine-check-context` | decision-record-convention | accepted | [`0030-greptile-review-machine-check-context.md`](0030-greptile-review-machine-check-context.md) |
 | 0031 | `0031-greptile-review-with-repo-cluster-context` | continuous-code-review | accepted | [`0031-greptile-review-with-repo-cluster-context.md`](0031-greptile-review-with-repo-cluster-context.md) |
+| 0032 | `0032-group-pointer-caret-constraint` | skill-registry-group-structure | accepted | [`0032-group-pointer-caret-constraint.md`](0032-group-pointer-caret-constraint.md) |

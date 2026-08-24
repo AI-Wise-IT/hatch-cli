@@ -4,7 +4,8 @@
 
 - **id:** 0016-group-member-manifest-format
 - **component:** skill-registry-group-structure
-- **status:** accepted
+- **status:** superseded
+- **superseded_by:** 0032-group-pointer-caret-constraint
 - **applies_to:** every group folder's `skill.json` in the skill-content repo (hatch-skills); `hatch import`'s group-parsing and member-resolution logic in the Hatch CLI
 - **decision_record:** `docs/architecture/decisions/0016-group-member-manifest-format.md`
 
@@ -72,4 +73,5 @@ Expected result: the confirmation line, exit 0. A group's `skill.json` carries a
 
 - Resolves the open item [0013-registry-group-structure-and-permanence](0013-registry-group-structure-and-permanence.md) left deferred: "this record establishes the mechanism [for group members]; the use-case document does not yet reflect it" — this record fixes the concrete file format `hatch import` and the registry both need, without contradicting 0013's settled semantics.
 - Builds on [0009-skill-versioning-semver-tags](0009-skill-versioning-semver-tags.md) (per-folder `skill.json`, the `<name>@<version>` tag mechanism) and [0003-registry-github-tarball-fetch](0003-registry-github-tarball-fetch.md) (ref-parameterized fetch).
-- No known conflicting decision records.
+- **Superseded by [0032-group-pointer-caret-constraint](0032-group-pointer-caret-constraint.md)**, which extends a pointer member's `version` to accept a caret constraint alongside an exact pin. This record's Decision states that a present `version` means an exact pin; that is no longer true. The rest of what this record settled — `members` on the group's own `skill.json`, entries distinguished by `kind`, an omitted `version` meaning latest on `main`, and group-to-group pointers at arbitrary depth — is carried forward unchanged by 0032.
+- No other conflicting decision records.
