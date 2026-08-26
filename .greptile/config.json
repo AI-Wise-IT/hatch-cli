@@ -1,5 +1,6 @@
 {
   "statusCheck": false,
+  "labels": ["review"],
   "rules": [
     {
       "id": "adr-0002-cli-runtime-nodejs",
