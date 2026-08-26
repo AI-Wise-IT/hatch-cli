@@ -83,7 +83,7 @@ Because initialization places content, it SHALL record the same baseline that lo
 
 - **WHEN** initialization succeeds
 - **THEN** the manifest's entry for the self-documentation skill records a content hash of what was placed
-- **AND** that hash describes the deployed files only, excluding registry-only files that were never placed
+- **AND** that hash describes the harness directory as initialization leaves it, so a file already present there is covered rather than omitted
 - **AND** a later edit to the placed content is detected as a local edit, exactly as for an imported item
 
 ### Requirement: Initialization is atomic

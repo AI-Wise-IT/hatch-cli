@@ -25,7 +25,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { authenticate } from "../auth/authenticate.js";
 import { getHarnessDefinition, isKnownHarness } from "../harness-registry.js";
-import { hashEntries } from "../manifest-migrations/content-hash.js";
+import { hashDiskTree } from "../manifest-migrations/content-hash.js";
 import { migrateManifest } from "../manifest-migrations/index.js";
 import { isTestProject } from "../project/test-project.js";
 import { openVersionControl } from "../project/version-control.js";
@@ -217,17 +217,25 @@ export async function runInit(argv: string[]): Promise<number> {
         // unprotected, since both `hatch import` and `hatch remove` read an
         // absent hash as "no baseline" and grandfather the item as clean.
         //
-        // Unlike import's placement path there is nothing to reconcile per
-        // harness: a single fetch is written verbatim to every declared
-        // harness, with no suffix resolution and no destination-occupied
-        // skips, so the primary harness's placed content is these files for
-        // any primary. Registry-only files are excluded because they are
-        // never deployed — the same exclusion placement applies above.
+        // Hashed from the destination tree rather than from the fetched
+        // files, because those two can differ: placement writes into the
+        // directory without clearing it, so anything already sitting there
+        // is left in place and would be absent from a fetch-derived hash.
+        // Import and remove both hash the whole directory, so a baseline
+        // that skipped such a file would report the untouched placement as
+        // locally edited the moment anything looked at it.
+        //
+        // The primary harness is the first alphabetically, the same one the
+        // comparison side reads (0034). Every declared harness receives an
+        // identical copy here, so which one that is does not change the
+        // value — only where it is read from.
         [SELF_DOC_SKILL_NAME]: {
           version: extractSkillVersion(fetchResult.files),
-          contentHash: hashEntries(
-            [...fetchResult.files.entries()].filter(
-              ([relativePath]) => !isRegistryOnlyFile(relativePath),
+          contentHash: hashDiskTree(
+            join(
+              targetPath,
+              getHarnessDefinition(sortedHarnesses[0] as string).skillsDir,
+              SELF_DOC_SKILL_NAME,
             ),
           ),
         },

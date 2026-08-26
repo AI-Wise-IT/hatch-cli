@@ -40,7 +40,6 @@ import {
   resolveSkillFolderName,
 } from "../harness-registry.js";
 import {
-  diskTreeIsEmpty,
   hashDiskTree,
   hashEntries,
 } from "../manifest-migrations/content-hash.js";
@@ -57,6 +56,7 @@ import {
   createSnapshot,
   restoreSnapshot,
   snapshotTree,
+  treeIsEmpty,
 } from "../project/file-snapshot.js";
 import { isTestProject } from "../project/test-project.js";
 import {
@@ -252,6 +252,21 @@ function removeIfEmpty(dir: string, undo: UndoLog): boolean {
   return true;
 }
 
+// The manifest names a group as well as its members, but a group has no
+// placed content of its own — members are unpacked flat under their own
+// names (ADR-0013), and a group's entry carries no contentHash for exactly
+// that reason (ADR-0034). A group is recognized the way `hatch remove`
+// already recognizes one: by the members pointing back at it, since its own
+// entry carries no marker (ADR-0017).
+function deployedEntryNames(skills: Record<string, SkillEntry>): string[] {
+  const groupNames = new Set(
+    Object.values(skills)
+      .map((entry) => entry.group)
+      .filter((group): group is string => group !== undefined),
+  );
+  return Object.keys(skills).filter((name) => !groupNames.has(name));
+}
+
 // A harness whose recorded directory has moved (harness-registry.json's
 // `previousSkillsDir`) leaves content behind at the one it used to occupy:
 // content the harness can no longer find, or — once this import places a
@@ -272,12 +287,18 @@ function removeIfEmpty(dir: string, undo: UndoLog): boolean {
 // list. The previously occupied directory and its parent are retired only
 // once doing so leaves nothing behind.
 //
+// "Recorded" means recorded *and deployed*. A group's own manifest entry is
+// neither — groups are unpacked flat and only their members are ever placed
+// (ADR-0013), so nothing named after a group was written by Hatch under any
+// harness directory. Anything sitting at that path is the developer's, and
+// `deployedNames` is what keeps this from moving or deleting it.
+//
 // Every move and every delete is logged first, so import's own rollback puts
 // the project back exactly as it found it.
 function migrateHarnessDirectories(
   targetPath: string,
   harnesses: string[],
-  recordedNames: string[],
+  deployedNames: string[],
   undo: UndoLog,
 ): Migration {
   const migration: Migration = { relocated: [], reclaimed: [] };
@@ -292,7 +313,7 @@ function migrateHarnessDirectories(
     if (!existsSync(previousDir)) {
       continue;
     }
-    for (const name of recordedNames) {
+    for (const name of deployedNames) {
       const previousEntryDir = join(previousDir, name);
       if (!existsSync(previousEntryDir)) {
         continue;
@@ -304,7 +325,7 @@ function migrateHarnessDirectories(
       // left in the previous directory is swept up without being reported as
       // reclaimed; one in the current directory does not make the entry
       // "present in both", so the real copy is still carried across.
-      if (diskTreeIsEmpty(previousEntryDir)) {
+      if (treeIsEmpty(previousEntryDir)) {
         rmSync(previousEntryDir, { recursive: true, force: true });
         undo.prunedDirectories.push(previousEntryDir);
         continue;
@@ -312,7 +333,7 @@ function migrateHarnessDirectories(
 
       snapshotTree(targetPath, previousEntryDir, undo.snapshot);
 
-      if (existsSync(currentEntryDir) && !diskTreeIsEmpty(currentEntryDir)) {
+      if (existsSync(currentEntryDir) && !treeIsEmpty(currentEntryDir)) {
         rmSync(previousEntryDir, { recursive: true, force: true });
         migration.reclaimed.push({
           harness,
@@ -696,7 +717,7 @@ export async function runImport(argv: string[]): Promise<number> {
     migration = migrateHarnessDirectories(
       targetPath,
       sortedHarnesses,
-      Object.keys(existingSkills),
+      deployedEntryNames(existingSkills),
       undo,
     );
   } catch (error) {

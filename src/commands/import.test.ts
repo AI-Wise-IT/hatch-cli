@@ -3316,3 +3316,54 @@ describe("runImport — the migration is reported", () => {
     ]);
   });
 });
+
+// A group's own manifest entry names no placed content: members are unpacked
+// flat under their own names (ADR-0013), so nothing was ever written to
+// `<harness>/skills/<group-name>`. Anything sitting there is the developer's.
+describe("runImport — a group's own name is not migrated", () => {
+  it("leaves a directory named after a group exactly where it is", async () => {
+    seedManifest(["codex"], {
+      "my-group": { version: "1.0.0" },
+      alpha: { version: "1.0.0", group: "my-group" },
+    });
+    // The developer's own notes, at a path Hatch never placed anything.
+    placeLegacy("my-group", "# my own notes, not Hatch's");
+    placeLegacy("alpha");
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    // The member is migrated, being real placed content.
+    expect(existsSync(legacyDirOf("alpha"))).toBe(false);
+    expect(readFileSync(join(currentDirOf("alpha"), "SKILL.md"), "utf8")).toBe(
+      "# legacy alpha",
+    );
+    // The group's name is not touched, in either direction.
+    expect(
+      readFileSync(join(legacyDirOf("my-group"), "SKILL.md"), "utf8"),
+    ).toBe("# my own notes, not Hatch's");
+    expect(existsSync(currentDirOf("my-group"))).toBe(false);
+    expect(consoleLogs.join("\n")).not.toContain("my-group");
+    // Still holding the developer's directory, so the legacy tree stays.
+    expect(existsSync(join(target, LEGACY_DIR))).toBe(true);
+  });
+
+  it("does not delete a group-named directory when the destination is occupied", async () => {
+    seedManifest(["codex"], {
+      "my-group": { version: "1.0.0" },
+      alpha: { version: "1.0.0", group: "my-group" },
+    });
+    placeLegacy("my-group", "# my own notes, not Hatch's");
+    placeCurrent("my-group", "# something else of mine");
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(join(legacyDirOf("my-group"), "SKILL.md"), "utf8"),
+    ).toBe("# my own notes, not Hatch's");
+    expect(
+      readFileSync(join(currentDirOf("my-group"), "SKILL.md"), "utf8"),
+    ).toBe("# something else of mine");
+  });
+});

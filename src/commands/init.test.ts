@@ -146,6 +146,31 @@ describe("runInit — main flow", () => {
     );
   });
 
+  // Placement writes into the destination without clearing it, so anything
+  // already sitting there is left on disk. A baseline derived from the fetched
+  // files would omit it, and import and remove both hash the whole directory —
+  // so the untouched placement would report as locally edited immediately.
+  it("hashes the destination it leaves behind, not just the files it fetched", async () => {
+    const project = await gitProject();
+    const placed = join(project, ".claude", "skills", "hatch-usage");
+    mkdirSync(placed, { recursive: true });
+    writeFileSync(join(placed, "EXTRA.md"), "was already here", "utf8");
+
+    await runInit(["--path", project, "--harness", "claude"]);
+
+    // Left exactly where it was.
+    expect(readFileSync(join(placed, "EXTRA.md"), "utf8")).toBe(
+      "was already here",
+    );
+    const skills = readManifest(project).skills as Record<
+      string,
+      { contentHash?: string }
+    >;
+    // The baseline describes the directory as it now stands, so nothing
+    // reads this placement as edited.
+    expect(skills["hatch-usage"]?.contentHash).toBe(hashDiskTree(placed));
+  });
+
   // A harness's directory is registry data, never manifest data (ADR-0033):
   // moving codex's directory must not change what the manifest records.
   it("records the harness by name, with no directory path of its own", async () => {

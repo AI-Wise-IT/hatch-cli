@@ -17,7 +17,9 @@
 
 **The hash is recorded by every command that places content, not only by `hatch import`.** A command that writes skill content into a project and records a manifest entry for it MUST record that entry's `contentHash` in the same operation. Today that is `hatch import` and `hatch init`; it binds any future placing command on the same terms.
 
-For `hatch init` the computation has no per-harness reconciliation to do. Initialization performs a single registry fetch of the fixed self-documentation skill and writes it verbatim into every declared harness, with no harness-suffix resolution and no destination-occupied handling, so the primary harness's placed content is that one set of files whichever harness is primary. Excluding registry-only files is the only filtering the hash needs.
+Whatever a placing command computes the hash *from*, the value it records MUST describe the primary harness's skill directory as that command leaves it. The comparison side reads the directory, not a file list, so a baseline that omits something the command left on disk reports an untouched placement as edited.
+
+For `hatch init` that is the directory itself, hashed after placement. Initialization performs a single registry fetch of the fixed self-documentation skill and writes it verbatim into every declared harness, with no harness-suffix resolution and no destination-occupied handling, so which harness is primary does not change the value — only where it is read from. It writes into the destination without clearing it, so a file already sitting there is left in place and belongs in the baseline; deriving the hash from the fetched files would leave it out.
 
 At re-import time, `hatch import` recomputes this same hash from what is currently on disk at the primary harness's skill directory and compares it against the stored `contentHash`:
 - **Match:** the placed content is exactly what Hatch last wrote — eligible for AF-1 (already up to date) or AF-2 (update available, no local edits).
@@ -54,7 +56,7 @@ The fix is one field at one call site. This record exists because the *rule* nee
 
 ## Consequences
 
-- `src/commands/init.ts` computes `contentHash` over its fetched files, filtered by `isRegistryOnlyFile`, and records it on the self-documentation skill's manifest entry.
+- `src/commands/init.ts` computes `contentHash` over the primary harness's placed directory once placement is done, and records it on the self-documentation skill's manifest entry.
 - `src/commands/import.ts` is unchanged: its placement path already computes and writes the hash, and its re-import check already compares against it.
 - `src/commands/remove.ts` is unchanged: its `"clean"` fallback for an absent hash remains correct for genuinely legacy entries, and stops receiving freshly-created ones.
 - A project initialized by a CLI carrying this record has local-edit protection on its self-documentation skill from the moment it is created, rather than from its first re-import.
@@ -63,6 +65,7 @@ The fix is one field at one call site. This record exists because the *rule* nee
 
 - MUST register the v2->v3 migration in `src/manifest-migrations/index.ts` keyed by `2` (the version it migrates *from*), per [0010](0010-manifest-schema-migrations.md)'s existing convention.
 - MUST compute `contentHash` as a SHA-256 hash over the sorted `(relativePath, content)` pairs of the files actually placed for a skill, excluding registry-only files and excluding any AF-6 skipped/suffixed file.
+- MUST record a value describing the primary harness's skill directory as the command leaves it — a command that writes into a destination it does not clear MUST hash that destination rather than its own file list.
 - MUST compute `contentHash` from the primary (first-alphabetical) declared harness's placed content only — MUST NOT compute or store a separate hash per harness in this MVP.
 - MUST record `contentHash` on every skill manifest entry written by any command that places that skill's content — `hatch import` and `hatch init` today, and any placing command added later — MUST NOT write it on a group's own top-level manifest entry, which has no placed files of its own.
 - MUST NOT introduce a manifest entry for placed content without its `contentHash`; an absent hash is reserved for entries predating the field.
