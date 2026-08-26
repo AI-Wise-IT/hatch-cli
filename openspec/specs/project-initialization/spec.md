@@ -65,6 +65,8 @@ The command SHALL operate on an existing directory only. It MUST NOT create the 
 
 `hatch init` SHALL always place the fixed self-documentation skill, once per declared harness. There SHALL be no flag, argument, or environment setting that skips it — a project cannot be initialized without it.
 
+Because initialization places content, it SHALL record the same baseline that local-edit detection compares against for any other placed item. An item recorded without that baseline is treated as having none, and is reported as unedited however it is later changed.
+
 #### Scenario: Skill placed for every declared harness
 
 - **WHEN** initialization succeeds for a project declaring two harnesses
@@ -76,6 +78,13 @@ The command SHALL operate on an existing directory only. It MUST NOT create the 
 - **WHEN** `hatch init` is invoked with an argument intended to skip the self-documentation skill
 - **THEN** the system rejects the argument as unrecognized
 - **AND** no initialization occurs
+
+#### Scenario: The placed skill is protected from silent overwrite
+
+- **WHEN** initialization succeeds
+- **THEN** the manifest's entry for the self-documentation skill records a content hash of what was placed
+- **AND** that hash describes the deployed files only, excluding registry-only files that were never placed
+- **AND** a later edit to the placed content is detected as a local edit, exactly as for an imported item
 
 ### Requirement: Initialization is atomic
 

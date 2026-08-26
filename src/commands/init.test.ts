@@ -9,6 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { hashDiskTree } from "../manifest-migrations/content-hash.js";
 
 vi.mock("../auth/credentials.js", () => ({
   resolveToken: vi.fn(),
@@ -114,8 +115,59 @@ describe("runInit — main flow", () => {
     expect(readManifest(project)).toEqual({
       schemaVersion: 4,
       harnesses: ["claude"],
-      skills: { "hatch-usage": { version: "1.0.0" } },
+      skills: {
+        "hatch-usage": {
+          version: "1.0.0",
+          contentHash: hashDiskTree(
+            join(project, ".claude", "skills", "hatch-usage"),
+          ),
+        },
+      },
     });
+  });
+
+  // 0034-content-hash-recorded-by-every-placing-command.md: init places
+  // content, so it records the baseline local-edit detection compares
+  // against. An absent hash is read as "no baseline" by both `hatch import`
+  // and `hatch remove`, which grandfather the item as clean — so without
+  // this the self-documentation skill would be permanently unprotected.
+  it("records a content hash matching the content it placed", async () => {
+    const project = await gitProject();
+
+    await runInit(["--path", project, "--harness", "claude"]);
+
+    const skills = readManifest(project).skills as Record<
+      string,
+      { contentHash?: string }
+    >;
+    expect(skills["hatch-usage"]?.contentHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(skills["hatch-usage"]?.contentHash).toBe(
+      hashDiskTree(join(project, ".claude", "skills", "hatch-usage")),
+    );
+  });
+
+  // A harness's directory is registry data, never manifest data (ADR-0033):
+  // moving codex's directory must not change what the manifest records.
+  it("records the harness by name, with no directory path of its own", async () => {
+    const project = await gitProject();
+
+    const exitCode = await runInit(["--path", project, "--harness", "codex"]);
+
+    expect(exitCode).toBe(0);
+    const manifest = readManifest(project);
+    expect(manifest.harnesses).toEqual(["codex"]);
+    // Nothing anywhere in the manifest names a directory.
+    const raw = readFileSync(join(project, "hatch.manifest.json"), "utf8");
+    expect(raw).not.toContain(".agents");
+    expect(raw).not.toContain("skillsDir");
+    expect(raw).not.toContain(".codex");
+    // The content itself still lands in the registry-recorded directory.
+    expect(
+      readFileSync(
+        join(project, ".agents", "skills", "hatch-usage", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe("# Hatch Usage");
   });
 
   it("defaults the target to the current working directory when --path is omitted", async () => {
@@ -209,14 +261,21 @@ describe("runInit — the self-documentation skill is always placed", () => {
       "utf8",
     );
     const codex = readFileSync(
-      join(project, ".codex", "skills", "hatch-usage", "SKILL.md"),
+      join(project, ".agents", "skills", "hatch-usage", "SKILL.md"),
       "utf8",
     );
     expect(claude).toBe(codex);
 
     const manifest = readManifest(project);
     expect(manifest.harnesses).toEqual(["claude", "codex"]);
-    expect(manifest.skills).toEqual({ "hatch-usage": { version: "1.0.0" } });
+    expect(manifest.skills).toEqual({
+      "hatch-usage": {
+        version: "1.0.0",
+        contentHash: hashDiskTree(
+          join(project, ".claude", "skills", "hatch-usage"),
+        ),
+      },
+    });
   });
 
   it("offers no opt-out — a skip-style argument is rejected as unrecognized", async () => {
@@ -259,7 +318,10 @@ describe("runInit — the self-documentation skill is always placed", () => {
     expect(existsSync(join(placed, "SKILL.md"))).toBe(true);
     expect(existsSync(join(placed, "skill.json"))).toBe(false);
     expect(readManifest(project).skills).toEqual({
-      "hatch-usage": { version: "2.3.4" },
+      "hatch-usage": {
+        version: "2.3.4",
+        contentHash: hashDiskTree(placed),
+      },
     });
   });
 });
@@ -308,7 +370,7 @@ describe("runInit — initialization is atomic", () => {
     // Placement runs alphabetically (claude, then codex). A directory
     // squatting where codex's SKILL.md must be written makes that write —
     // and only that write — fail partway through.
-    mkdirSync(join(project, ".codex", "skills", "hatch-usage", "SKILL.md"), {
+    mkdirSync(join(project, ".agents", "skills", "hatch-usage", "SKILL.md"), {
       recursive: true,
     });
 
@@ -329,13 +391,13 @@ describe("runInit — initialization is atomic", () => {
     expect(existsSync(join(project, "hatch.manifest.json"))).toBe(false);
     // ...and what was already on disk is untouched.
     expect(
-      existsSync(join(project, ".codex", "skills", "hatch-usage", "SKILL.md")),
+      existsSync(join(project, ".agents", "skills", "hatch-usage", "SKILL.md")),
     ).toBe(true);
   });
 
   it("makes no commit when initialization fails in a git project", async () => {
     const project = await gitProject();
-    mkdirSync(join(project, ".codex", "skills", "hatch-usage", "SKILL.md"), {
+    mkdirSync(join(project, ".agents", "skills", "hatch-usage", "SKILL.md"), {
       recursive: true,
     });
 
@@ -398,7 +460,7 @@ describe("runInit — an already-initialized project is not re-initialized", () 
       manifestBefore,
     );
     expect(readManifest(project).harnesses).toEqual(["claude"]);
-    expect(existsSync(join(project, ".codex"))).toBe(false);
+    expect(existsSync(join(project, ".agents"))).toBe(false);
     expect(fetchRegistryFolder).not.toHaveBeenCalled();
   });
 
@@ -545,7 +607,7 @@ describe("runInit — test-project opt-in (0027)", () => {
 
     // The skill is still placed once per declared harness, with identical
     // content, and the whole scaffold is still one commit.
-    for (const dir of [".claude", ".codex"]) {
+    for (const dir of [".claude", ".agents"]) {
       expect(
         readFileSync(
           join(flagged, dir, "skills", "hatch-usage", "SKILL.md"),

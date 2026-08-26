@@ -25,6 +25,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { authenticate } from "../auth/authenticate.js";
 import { getHarnessDefinition, isKnownHarness } from "../harness-registry.js";
+import { hashEntries } from "../manifest-migrations/content-hash.js";
 import { migrateManifest } from "../manifest-migrations/index.js";
 import { isTestProject } from "../project/test-project.js";
 import { openVersionControl } from "../project/version-control.js";
@@ -210,8 +211,25 @@ export async function runInit(argv: string[]): Promise<number> {
       // byte-identical to what it was before this flag existed.
       ...(testProject ? { testProject: true } : {}),
       skills: {
+        // 0034-content-hash-recorded-by-every-placing-command.md: init
+        // places content, so it records the baseline local-edit detection
+        // compares against — without it this entry would be permanently
+        // unprotected, since both `hatch import` and `hatch remove` read an
+        // absent hash as "no baseline" and grandfather the item as clean.
+        //
+        // Unlike import's placement path there is nothing to reconcile per
+        // harness: a single fetch is written verbatim to every declared
+        // harness, with no suffix resolution and no destination-occupied
+        // skips, so the primary harness's placed content is these files for
+        // any primary. Registry-only files are excluded because they are
+        // never deployed — the same exclusion placement applies above.
         [SELF_DOC_SKILL_NAME]: {
           version: extractSkillVersion(fetchResult.files),
+          contentHash: hashEntries(
+            [...fetchResult.files.entries()].filter(
+              ([relativePath]) => !isRegistryOnlyFile(relativePath),
+            ),
+          ),
         },
       },
     });
