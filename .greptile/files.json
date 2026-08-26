@@ -1,10 +1,6 @@
 {
   "files": [
     {
-      "path": "docs/architecture/decisions/0001-harness-suffix-convention.md",
-      "description": "Harness-targeting via flat, suffixed skill folders — the accepted decision governing skill-registry-harness-targeting. Enforce what it mandates; do not restate it."
-    },
-    {
       "path": "docs/architecture/decisions/0002-cli-runtime-nodejs.md",
       "description": "Hatch CLI runtime: TypeScript on Node.js, npm-distributed — the accepted decision governing cli-runtime. Enforce what it mandates; do not restate it."
     },
@@ -65,10 +61,6 @@
       "description": "Manifest schema v2: record group membership per skill, and the group itself, in `hatch.manifest.json` — the accepted decision governing data-migrations. Enforce what it mandates; do not restate it."
     },
     {
-      "path": "docs/architecture/decisions/0018-manifest-content-hash-local-edit-detection.md",
-      "description": "Local-edit detection for re-import: a stored per-skill `contentHash` in the manifest — the accepted decision governing data-migrations. Enforce what it mandates; do not restate it."
-    },
-    {
       "path": "docs/architecture/decisions/0019-registry-removed-metadata-flag.md",
       "description": "Registry \"removed\" metadata flag: a boolean `removed` field on `skill.json` — the accepted decision governing skill-registry-group-structure. Enforce what it mandates; do not restate it."
     },
@@ -119,6 +111,14 @@
     {
       "path": "docs/architecture/decisions/0032-group-pointer-caret-constraint.md",
       "description": "Group pointer version constraints: exact pin or caret, resolved before a no-op — the accepted decision governing skill-registry-group-structure. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0033-harness-suffix-convention-and-registry-directories.md",
+      "description": "Harness-targeting via flat, suffixed skill folders, with each harness's directory as registry data — the accepted decision governing skill-registry-harness-targeting. Enforce what it mandates; do not restate it."
+    },
+    {
+      "path": "docs/architecture/decisions/0034-content-hash-recorded-by-every-placing-command.md",
+      "description": "Local-edit detection for re-import: a stored per-skill `contentHash` in the manifest, recorded by every command that places content — the accepted decision governing data-migrations. Enforce what it mandates; do not restate it."
     }
   ]
 }

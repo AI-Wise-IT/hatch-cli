@@ -115,7 +115,7 @@ describe("runRemove — main flow", () => {
     const hash = placeSkill(".claude", "example-skill", {
       "SKILL.md": "# Example Skill",
     });
-    placeSkill(".codex", "example-skill", { "SKILL.md": "# Example Skill" });
+    placeSkill(".agents", "example-skill", { "SKILL.md": "# Example Skill" });
     writeManifest(
       { "example-skill": { version: "1.0.0", contentHash: hash } },
       ["claude", "codex"],
@@ -128,7 +128,7 @@ describe("runRemove — main flow", () => {
     expect(existsSync(join(target, ".claude", "skills", "example-skill"))).toBe(
       false,
     );
-    expect(existsSync(join(target, ".codex", "skills", "example-skill"))).toBe(
+    expect(existsSync(join(target, ".agents", "skills", "example-skill"))).toBe(
       false,
     );
     const manifest = JSON.parse(
@@ -416,11 +416,11 @@ describe("runRemove — AF-5: drop a harness", () => {
     const claudeHash = placeSkill(".claude", "example-skill", {
       "SKILL.md": "# Example Skill",
     });
-    placeSkill(".codex", "example-skill", { "SKILL.md": "# Example Skill" });
+    placeSkill(".agents", "example-skill", { "SKILL.md": "# Example Skill" });
     placeSkill(".claude", "example-member", {
       "SKILL.md": "# A",
     });
-    placeSkill(".codex", "example-member", { "SKILL.md": "# A" });
+    placeSkill(".agents", "example-member", { "SKILL.md": "# A" });
     writeManifest(
       {
         "example-skill": { version: "1.0.0", contentHash: claudeHash },
@@ -440,12 +440,12 @@ describe("runRemove — AF-5: drop a harness", () => {
     const exitCode = await runRemove(["--harness", "codex", "--path", target]);
 
     expect(exitCode).toBe(0);
-    expect(existsSync(join(target, ".codex", "skills", "example-skill"))).toBe(
+    expect(existsSync(join(target, ".agents", "skills", "example-skill"))).toBe(
       false,
     );
-    expect(existsSync(join(target, ".codex", "skills", "example-member"))).toBe(
-      false,
-    );
+    expect(
+      existsSync(join(target, ".agents", "skills", "example-member")),
+    ).toBe(false);
     expect(existsSync(join(target, ".claude", "skills", "example-skill"))).toBe(
       true,
     );
@@ -474,7 +474,7 @@ describe("runRemove — AF-5: drop a harness", () => {
     const hash = placeSkill(".claude", "example-skill", {
       "SKILL.md": "# Example Skill",
     });
-    placeSkill(".codex", "example-skill", { "SKILL.md": "# Example Skill" });
+    placeSkill(".agents", "example-skill", { "SKILL.md": "# Example Skill" });
     writeManifest(
       { "example-skill": { version: "1.0.0", contentHash: hash } },
       ["claude", "codex"],
@@ -484,7 +484,7 @@ describe("runRemove — AF-5: drop a harness", () => {
     // Hand-edit the codex-side content — hatch remove --harness must not
     // care, since AF-5 has no drift/local-edit gating at all.
     writeFileSync(
-      join(target, ".codex", "skills", "example-skill", "SKILL.md"),
+      join(target, ".agents", "skills", "example-skill", "SKILL.md"),
       "# Hand-edited",
       "utf8",
     );
@@ -492,7 +492,7 @@ describe("runRemove — AF-5: drop a harness", () => {
     const exitCode = await runRemove(["--harness", "codex", "--path", target]);
 
     expect(exitCode).toBe(0);
-    expect(existsSync(join(target, ".codex", "skills", "example-skill"))).toBe(
+    expect(existsSync(join(target, ".agents", "skills", "example-skill"))).toBe(
       false,
     );
   });
@@ -560,7 +560,7 @@ describe("runRemove — AF-5: drop a harness", () => {
     const claudeHash = placeSkill(".claude", "example-skill", {
       "SKILL.md": "# Claude variant",
     });
-    placeSkill(".codex", "example-skill", { "SKILL.md": "# Codex variant" });
+    placeSkill(".agents", "example-skill", { "SKILL.md": "# Codex variant" });
     writeManifest(
       { "example-skill": { version: "1.0.0", contentHash: claudeHash } },
       ["claude", "codex"],
@@ -578,7 +578,7 @@ describe("runRemove — AF-5: drop a harness", () => {
     const removeExit = await runRemove(["example-skill", "--path", target]);
     expect(removeExit).toBe(0);
     expect(consoleLogs.some((l) => l.includes("has local edits"))).toBe(false);
-    expect(existsSync(join(target, ".codex", "skills", "example-skill"))).toBe(
+    expect(existsSync(join(target, ".agents", "skills", "example-skill"))).toBe(
       false,
     );
   });
@@ -662,7 +662,7 @@ describe("runRemove — rollback on partial failure", () => {
   // A skill with the nested payload folders a skill is allowed to carry,
   // placed under both declared harnesses.
   function placeRichSkill(): void {
-    for (const harnessDir of [".claude", ".codex"]) {
+    for (const harnessDir of [".claude", ".agents"]) {
       const dir = join(target, harnessDir, "skills", "example-skill");
       mkdirSync(join(dir, "references", "deep"), { recursive: true });
       mkdirSync(join(dir, "assets"), { recursive: true });
@@ -677,7 +677,7 @@ describe("runRemove — rollback on partial failure", () => {
   }
 
   function expectFullyRestored(): void {
-    for (const harnessDir of [".claude", ".codex"]) {
+    for (const harnessDir of [".claude", ".agents"]) {
       const dir = join(target, harnessDir, "skills", "example-skill");
       expect(readFileSync(join(dir, "SKILL.md"), "utf8")).toBe(
         "# Example Skill",

@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -170,10 +171,25 @@ describe("runImport — main flow", () => {
     ).toBe("# Example Skill");
     expect(
       readFileSync(
-        join(target, ".codex", "skills", "example-skill", "SKILL.md"),
+        join(target, ".agents", "skills", "example-skill", "SKILL.md"),
         "utf8",
       ),
     ).toBe("# Example Skill");
+    // Both declared harnesses carry byte-identical content.
+    expect(
+      readFileSync(
+        join(target, ".agents", "skills", "example-skill", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe(
+      readFileSync(
+        join(target, ".claude", "skills", "example-skill", "SKILL.md"),
+        "utf8",
+      ),
+    );
+    // codex's directory is `.agents/skills`; the one it used to occupy is
+    // never written to.
+    expect(existsSync(join(target, ".codex"))).toBe(false);
 
     const manifest = JSON.parse(
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
@@ -201,7 +217,7 @@ describe("runImport — main flow", () => {
       "utf8",
     );
     // A stray harness folder on disk must not widen placement.
-    mkdirSync(join(target, ".codex", "skills"), { recursive: true });
+    mkdirSync(join(target, ".agents", "skills"), { recursive: true });
 
     const exitCode = await runImport(["example-skill", "--path", target]);
 
@@ -211,9 +227,12 @@ describe("runImport — main flow", () => {
         join(target, ".claude", "skills", "example-skill", "SKILL.md"),
       ),
     ).toBe(true);
-    expect(existsSync(join(target, ".codex", "skills", "example-skill"))).toBe(
+    expect(existsSync(join(target, ".agents", "skills", "example-skill"))).toBe(
       false,
     );
+    // The undeclared harness's directory is left exactly as it was found.
+    expect(existsSync(join(target, ".agents", "skills"))).toBe(true);
+    expect(readdirSync(join(target, ".agents", "skills"))).toEqual([]);
   });
 
   it("resolves the harness-suffixed variant over the plain default, deploying under the plain name", async () => {
@@ -253,6 +272,53 @@ describe("runImport — main flow", () => {
         "utf8",
       ),
     ).toBe("# Claude variant");
+  });
+
+  // A harness's reserved code and its directory are independent (ADR-0033):
+  // codex still resolves the `-cdx` sibling, and still deploys it under the
+  // plain name — only the directory it lands in moved.
+  it("deploys a -cdx registry variant under its plain name in the codex harness's directory", async () => {
+    vi.mocked(registryFolderExists).mockImplementation(
+      async (_token, name) => ({
+        ok: true,
+        exists: name === "example-skill-cdx" || name === "example-skill",
+      }),
+    );
+    vi.mocked(fetchRegistryFolder).mockImplementation(
+      async (_token, folderName) => {
+        if (folderName === "example-skill-cdx") {
+          return {
+            ok: true,
+            files: new Map([
+              ["SKILL.md", "# Codex variant"],
+              ["skill.json", '{"version":"2.0.0"}'],
+            ]),
+          };
+        }
+        return { ok: true, files: skillFiles() };
+      },
+    );
+
+    seedManifest(["codex"]);
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(fetchRegistryFolder).toHaveBeenCalledWith(
+      "existing-session-token",
+      "example-skill-cdx",
+      undefined,
+    );
+    // Suffix stripped at deploy time, under the harness's current directory.
+    expect(
+      readFileSync(
+        join(target, ".agents", "skills", "example-skill", "SKILL.md"),
+        "utf8",
+      ),
+    ).toBe("# Codex variant");
+    expect(
+      existsSync(join(target, ".agents", "skills", "example-skill-cdx")),
+    ).toBe(false);
+    expect(existsSync(join(target, ".codex"))).toBe(false);
   });
 });
 
@@ -623,9 +689,9 @@ describe("runImport — rollback on partial failure", () => {
     // has to be created breaks the second harness's placement outright —
     // this is not a destination-file conflict, so AF-6's skip/suffix
     // handling never sees it.
-    mkdirSync(join(target, ".codex", "skills"), { recursive: true });
+    mkdirSync(join(target, ".agents", "skills"), { recursive: true });
     writeFileSync(
-      join(target, ".codex", "skills", "example-skill"),
+      join(target, ".agents", "skills", "example-skill"),
       "not a directory",
       "utf8",
     );
@@ -1581,15 +1647,15 @@ describe("runImport — AF-5: --add-harness backfill", () => {
     expect(exitCode).toBe(0);
     expect(
       readFileSync(
-        join(target, ".codex", "skills", "example-skill", "SKILL.md"),
+        join(target, ".agents", "skills", "example-skill", "SKILL.md"),
         "utf8",
       ),
     ).toBe("# Example Skill");
     expect(
-      readFileSync(join(target, ".codex", "skills", "a", "SKILL.md"), "utf8"),
+      readFileSync(join(target, ".agents", "skills", "a", "SKILL.md"), "utf8"),
     ).toBe("# A");
     expect(
-      readFileSync(join(target, ".codex", "skills", "b", "SKILL.md"), "utf8"),
+      readFileSync(join(target, ".agents", "skills", "b", "SKILL.md"), "utf8"),
     ).toBe("# B");
 
     const manifest = JSON.parse(
@@ -1678,11 +1744,11 @@ describe("runImport — AF-5: --add-harness backfill", () => {
     writeExistingManifest(["claude"], {
       "example-skill": { version: "1.0.0", contentHash: "placeholder-hash" },
     });
-    mkdirSync(join(target, ".codex", "skills", "example-skill"), {
+    mkdirSync(join(target, ".agents", "skills", "example-skill"), {
       recursive: true,
     });
     writeFileSync(
-      join(target, ".codex", "skills", "example-skill", "SKILL.md"),
+      join(target, ".agents", "skills", "example-skill", "SKILL.md"),
       "# Pre-existing, not placed by Hatch",
       "utf8",
     );
@@ -1706,7 +1772,7 @@ describe("runImport — AF-5: --add-harness backfill", () => {
     expect(exitCode).toBe(0);
     expect(
       readFileSync(
-        join(target, ".codex", "skills", "example-skill", "SKILL.md"),
+        join(target, ".agents", "skills", "example-skill", "SKILL.md"),
         "utf8",
       ),
     ).toBe("# Pre-existing, not placed by Hatch");
@@ -1737,7 +1803,7 @@ describe("runImport — AF-5: --add-harness backfill", () => {
       readFileSync(join(target, "hatch.manifest.json"), "utf8"),
     );
     expect(manifest.harnesses).toEqual(["claude"]);
-    expect(existsSync(join(target, ".codex"))).toBe(false);
+    expect(existsSync(join(target, ".agents"))).toBe(false);
   });
 
   it("aborts cleanly when the registry can't be reached", async () => {
@@ -2173,7 +2239,7 @@ describe("runImport — --add-harness in a test project (0027)", () => {
     for (const name of ["example-skill", "_reimport-fixture"]) {
       expect(
         readFileSync(
-          join(target, ".codex", "skills", name, "SKILL.md"),
+          join(target, ".agents", "skills", name, "SKILL.md"),
           "utf8",
         ),
       ).toBe(`# ${name}`);
@@ -2598,5 +2664,706 @@ describe("runImport — a version that changes its file list is not a local edit
     expect(consoleLogs.some((m) => m.includes("already up to date"))).toBe(
       true,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Migrating a harness whose directory has moved (ADR-0033).
+//
+// `codex` records `.agents/skills` as its directory and `.codex/skills` as the
+// one it used to occupy. A project that imported before the move is holding
+// content the harness can no longer find — or, once an import places a fresh
+// copy, a second stale copy it still would. One pass over the manifest's
+// recorded names answers both: present only in the previous directory, an
+// entry is *moved* across; present in both, the previous copy is *reclaimed*.
+// ---------------------------------------------------------------------------
+
+const LEGACY_DIR = ".codex";
+const CURRENT_DIR = ".agents";
+
+function legacyDirOf(name: string): string {
+  return join(target, LEGACY_DIR, "skills", name);
+}
+
+function currentDirOf(name: string): string {
+  return join(target, CURRENT_DIR, "skills", name);
+}
+
+// The shape a project carries when it last imported before codex's directory
+// moved: content sitting at the harness's previously occupied location.
+function placeLegacy(name: string, content = `# legacy ${name}`): void {
+  const dir = legacyDirOf(name);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "SKILL.md"), content, "utf8");
+}
+
+function placeCurrent(name: string, content = `# current ${name}`): void {
+  const dir = currentDirOf(name);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "SKILL.md"), content, "utf8");
+}
+
+function movedLine(name: string): string {
+  return `  moved ".codex/skills/${name}" to ".agents/skills/${name}" — carried across to the directory the "codex" harness now uses.`;
+}
+
+function reclaimedLine(name: string): string {
+  return `  reclaimed ".codex/skills/${name}" — removed from the directory the "codex" harness no longer uses.`;
+}
+
+// Every line the migration pass contributed to the summary, in the order it
+// printed them.
+function migrationLines(): string[] {
+  return consoleLogs.filter(
+    (line) => line.startsWith('  moved "') || line.startsWith('  reclaimed "'),
+  );
+}
+
+// A standalone skill the registry serves at `version`, and nothing else.
+function mockSkill(
+  name: string,
+  version: string,
+  files: Array<[string, string]> = [["SKILL.md", `# ${name} v${version}`]],
+) {
+  vi.mocked(registryFolderExists).mockImplementation(
+    async (_token, folderName) => ({ ok: true, exists: folderName === name }),
+  );
+  vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) =>
+    path === `${name}/skill.json`
+      ? { ok: true, content: plainSkillJson(version) }
+      : { ok: false, reason: "not-found", detail: "not found" },
+  );
+  vi.mocked(fetchRegistryFolder).mockImplementation(async () => ({
+    ok: true,
+    files: new Map([["skill.json", plainSkillJson(version)], ...files]),
+  }));
+}
+
+// A one-nested-member group, for the paths that return early at group level.
+function mockNestedGroup(version: string) {
+  const groupJson = groupSkillJson(version, [{ kind: "nested", name: "a" }]);
+  vi.mocked(fetchRegistryFile).mockImplementation(async (_token, path) =>
+    path === "my-group/skill.json"
+      ? { ok: true, content: groupJson }
+      : { ok: false, reason: "not-found", detail: "not found" },
+  );
+  vi.mocked(fetchRegistryFolder).mockImplementation(async (_token, name) => {
+    if (name === "my-group") {
+      return {
+        ok: true,
+        files: new Map([
+          ["skill.json", groupJson],
+          ["a/SKILL.md", "# A"],
+        ]),
+      };
+    }
+    throw new Error(`unexpected fetch of ${name}`);
+  });
+}
+
+// A commit stub that fails, so a run can be observed rolling back.
+function breakTheCommit() {
+  vi.mocked(simpleGit).mockImplementationOnce(
+    () =>
+      ({
+        checkIsRepo: vi.fn().mockResolvedValue(true),
+        add: vi.fn().mockResolvedValue(undefined),
+        commit: vi.fn().mockRejectedValue(new Error("simulated git failure")),
+        // biome-ignore lint/suspicious/noExplicitAny: minimal stub of simple-git's SimpleGit surface
+      }) as any,
+  );
+}
+
+describe("runImport — reclaiming a harness's previously occupied directory", () => {
+  it("clears every manifest-recorded entry out of the previous directory and retires it once emptied", async () => {
+    seedManifest(["codex"], {
+      alpha: { version: "1.0.0" },
+      beta: { version: "1.0.0" },
+    });
+    placeLegacy("alpha");
+    placeLegacy("beta");
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    // The requested import completes as it otherwise would.
+    expect(
+      readFileSync(join(currentDirOf("example-skill"), "SKILL.md"), "utf8"),
+    ).toBe("# Example Skill");
+    expect(Object.keys(readManifest().skills).sort()).toEqual([
+      "alpha",
+      "beta",
+      "example-skill",
+    ]);
+
+    expect(existsSync(legacyDirOf("alpha"))).toBe(false);
+    expect(existsSync(legacyDirOf("beta"))).toBe(false);
+    // Nothing left behind, so the directory and its parent are retired too.
+    expect(existsSync(join(target, LEGACY_DIR, "skills"))).toBe(false);
+    expect(existsSync(join(target, LEGACY_DIR))).toBe(false);
+  });
+
+  it("covers manifest entries the import was not asked for", async () => {
+    seedManifest(["codex"], {
+      alpha: { version: "1.0.0" },
+      // No contentHash: the v1/v2 entry shape a project that last imported
+      // before the directory moved actually carries.
+      beta: { version: "1.0.0" },
+    });
+    placeLegacy("alpha");
+    placeLegacy("beta");
+    mockSkill("beta", "1.1.0", [["SKILL.md", "# beta v1.1"]]);
+
+    const exitCode = await runImport(["beta", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(readManifest().skills.beta.version).toBe("1.1.0");
+    // Not only the named target: alpha comes out of the legacy directory too.
+    expect(existsSync(legacyDirOf("alpha"))).toBe(false);
+    expect(existsSync(legacyDirOf("beta"))).toBe(false);
+    expect(existsSync(join(target, LEGACY_DIR))).toBe(false);
+    expect(migrationLines().sort()).toEqual([
+      movedLine("alpha"),
+      movedLine("beta"),
+    ]);
+  });
+
+  it("runs only for a harness the project declares", async () => {
+    // `claude` records no previous directory, so a `.codex/skills/` that
+    // happens to sit in this project is none of import's business.
+    seedManifest(["claude"], { alpha: { version: "1.0.0" } });
+    placeLegacy("alpha");
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(readFileSync(join(legacyDirOf("alpha"), "SKILL.md"), "utf8")).toBe(
+      "# legacy alpha",
+    );
+    expect(existsSync(join(target, LEGACY_DIR, "skills"))).toBe(true);
+    expect(migrationLines()).toEqual([]);
+  });
+
+  it("is a no-op that creates nothing when the previously occupied directory is absent", async () => {
+    seedManifest(["codex"], { alpha: { version: "1.0.0" } });
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(join(currentDirOf("example-skill"), "SKILL.md"), "utf8"),
+    ).toBe("# Example Skill");
+    // Nothing conjured up for the location this project never used.
+    expect(existsSync(join(target, LEGACY_DIR))).toBe(false);
+    expect(migrationLines()).toEqual([]);
+  });
+
+  it("leaves content it never recorded in place, keeping the directories that hold it", async () => {
+    seedManifest(["codex"], { alpha: { version: "1.0.0" } });
+    placeLegacy("alpha");
+    placeLegacy("unrelated", "# hand-written, never recorded");
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(existsSync(legacyDirOf("alpha"))).toBe(false);
+    expect(
+      readFileSync(join(legacyDirOf("unrelated"), "SKILL.md"), "utf8"),
+    ).toBe("# hand-written, never recorded");
+    // Not empty, so neither the directory nor its parent is retired.
+    expect(existsSync(join(target, LEGACY_DIR, "skills"))).toBe(true);
+    expect(existsSync(join(target, LEGACY_DIR))).toBe(true);
+    expect(migrationLines()).toEqual([movedLine("alpha")]);
+  });
+
+  it("puts the placed content, the relocation and the reclamation in one commit", async () => {
+    seedManifest(["codex"], {
+      alpha: { version: "1.0.0" },
+      gamma: { version: "1.0.0" },
+    });
+    placeLegacy("alpha"); // previous directory only — relocated
+    placeCurrent("gamma"); // present in both — reclaimed
+    placeLegacy("gamma");
+    // Commit the pre-migration state first, so the import's own commit is the
+    // only place the migration can show up.
+    await simpleGit(target).add(".");
+    await simpleGit(target).commit("seed");
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(await commitCount(target)).toBe(2); // the seed, plus one for the import
+    // Rename detection off, so a relocation reads as the delete/add pair it
+    // is on disk and every effect is visible in one listing.
+    const changed = await simpleGit(target).raw([
+      "diff",
+      "--name-status",
+      "--no-renames",
+      "HEAD~1",
+      "HEAD",
+    ]);
+    // The relocation...
+    expect(changed).toContain("D\t.codex/skills/alpha/SKILL.md");
+    expect(changed).toContain("A\t.agents/skills/alpha/SKILL.md");
+    // ...the reclamation...
+    expect(changed).toContain("D\t.codex/skills/gamma/SKILL.md");
+    // ...and the content this import placed.
+    expect(changed).toContain("A\t.agents/skills/example-skill/SKILL.md");
+    // gamma's authoritative copy never moved, so it is not in the diff at all.
+    expect(changed).not.toContain(".agents/skills/gamma/SKILL.md");
+  });
+});
+
+describe("runImport — carrying content across to the harness's current directory", () => {
+  it("moves a recorded entry across byte-for-byte, leaving its manifest entry alone", async () => {
+    const seededEntry = {
+      version: "1.2.3",
+      contentHash: "recorded-when-it-was-placed",
+      pin: { type: "range", value: "1.0.0" },
+    };
+    seedManifest(["codex"], { alpha: seededEntry });
+
+    // Bytes chosen to survive nothing but a byte-for-byte move: mixed line
+    // endings, non-ASCII, and a non-text payload in a nested folder.
+    const skillBytes = Buffer.from("# alpha — v1.2.3\r\nsecond line\n", "utf8");
+    const assetBytes = Buffer.from([0x00, 0x01, 0xff, 0xfe, 0x7f, 0x80]);
+    mkdirSync(join(legacyDirOf("alpha"), "assets"), { recursive: true });
+    writeFileSync(join(legacyDirOf("alpha"), "SKILL.md"), skillBytes);
+    writeFileSync(join(legacyDirOf("alpha"), "assets", "logo.bin"), assetBytes);
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    // Present in the harness's current directory...
+    expect(
+      readFileSync(join(currentDirOf("alpha"), "SKILL.md")).equals(skillBytes),
+    ).toBe(true);
+    expect(
+      readFileSync(join(currentDirOf("alpha"), "assets", "logo.bin")).equals(
+        assetBytes,
+      ),
+    ).toBe(true);
+    // ...and gone from the one it used to occupy.
+    expect(existsSync(legacyDirOf("alpha"))).toBe(false);
+    expect(existsSync(join(target, LEGACY_DIR))).toBe(false);
+
+    // Moved on disk, never re-fetched: nothing about the recorded entry moved
+    // with it. Only `example-skill` was ever fetched.
+    const alpha = readManifest().skills.alpha;
+    expect(alpha.version).toBe("1.2.3");
+    expect(alpha.contentHash).toBe("recorded-when-it-was-placed");
+    expect(alpha.pin).toEqual({ type: "range", value: "1.0.0" });
+    expect(vi.mocked(fetchRegistryFolder).mock.calls.map((c) => c[1])).toEqual([
+      "example-skill",
+    ]);
+  });
+
+  // Regression: before relocation existed, an already-current entry sitting
+  // only in the previous directory hashed as an empty tree in the harness's
+  // current directory, so import returned at the local-edit check without ever
+  // reaching the migration.
+  it("reclaims the legacy directory when the named target is already recorded and already current", async () => {
+    seedManifest(["codex"], {
+      alpha: { version: "1.0.0" },
+      beta: { version: "1.0.0" },
+    });
+    placeLegacy("alpha");
+    placeLegacy("beta");
+    // The registry serves exactly the version the manifest already records.
+    mockSkill("alpha", "1.0.0");
+
+    const exitCode = await runImport(["alpha", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    // "the requested import completes as it otherwise would"
+    expect(consoleLogs.some((l) => l.includes("already up to date"))).toBe(
+      true,
+    );
+    expect(consoleLogs.join("\n")).not.toContain("local edits");
+    // Both recorded entries are out of the legacy directory, and it is gone.
+    expect(existsSync(legacyDirOf("alpha"))).toBe(false);
+    expect(existsSync(legacyDirOf("beta"))).toBe(false);
+    expect(existsSync(join(target, LEGACY_DIR))).toBe(false);
+    // Carried across rather than dropped.
+    expect(readFileSync(join(currentDirOf("alpha"), "SKILL.md"), "utf8")).toBe(
+      "# legacy alpha",
+    );
+    expect(readFileSync(join(currentDirOf("beta"), "SKILL.md"), "utf8")).toBe(
+      "# legacy beta",
+    );
+  });
+
+  // Regression: the same misfire on the update path — a v3 entry carrying a
+  // contentHash, whose content was still in the previous directory, was
+  // reported as locally edited on every import, which blocked the very update
+  // that would have placed it.
+  it("updates a recorded entry whose content still sits in the previous directory, with no local-edit misfire", async () => {
+    const placed = "# alpha v1.0.0";
+    seedManifest(["codex"], {
+      alpha: {
+        version: "1.0.0",
+        contentHash: hashEntries([["SKILL.md", placed]]),
+      },
+    });
+    placeLegacy("alpha", placed);
+    mockSkill("alpha", "1.1.0", [["SKILL.md", "# alpha v1.1.0"]]);
+
+    const exitCode = await runImport(["alpha", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs.join("\n")).not.toContain("local edits");
+    expect(readManifest().skills.alpha.version).toBe("1.1.0");
+    expect(readFileSync(join(currentDirOf("alpha"), "SKILL.md"), "utf8")).toBe(
+      "# alpha v1.1.0",
+    );
+    expect(existsSync(join(target, LEGACY_DIR))).toBe(false);
+    expect(migrationLines()).toEqual([movedLine("alpha")]);
+  });
+
+  it("carries a locally edited entry across with its edit, then reports the edit", async () => {
+    const recorded = "# alpha as Hatch placed it";
+    seedManifest(["codex"], {
+      alpha: {
+        version: "1.0.0",
+        contentHash: hashEntries([["SKILL.md", recorded]]),
+      },
+    });
+    placeLegacy("alpha", "# alpha, hand-edited by the developer");
+    mockSkill("alpha", "1.1.0", [["SKILL.md", "# alpha v1.1.0"]]);
+
+    const exitCode = await runImport(["alpha", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    // The edit arrives intact, and is not overwritten by the update.
+    expect(readFileSync(join(currentDirOf("alpha"), "SKILL.md"), "utf8")).toBe(
+      "# alpha, hand-edited by the developer",
+    );
+    // Reported exactly as an edit made in the current directory would be.
+    expect(consoleLogs).toContain(
+      'hatch import: "alpha" has local edits — left untouched.',
+    );
+    expect(existsSync(join(target, LEGACY_DIR))).toBe(false);
+    expectManifestUnchanged();
+  });
+
+  it("leaves an entry present in both directories untouched in the current one", async () => {
+    seedManifest(["codex"], { alpha: { version: "1.0.0" } });
+    placeCurrent("alpha", "# the authoritative copy");
+    placeLegacy("alpha", "# the stale copy");
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(readFileSync(join(currentDirOf("alpha"), "SKILL.md"), "utf8")).toBe(
+      "# the authoritative copy",
+    );
+    expect(existsSync(legacyDirOf("alpha"))).toBe(false);
+    expect(existsSync(join(target, LEGACY_DIR))).toBe(false);
+    // Reclaimed, not relocated.
+    expect(migrationLines()).toEqual([reclaimedLine("alpha")]);
+  });
+});
+
+describe("runImport — the migration is part of the import's transaction", () => {
+  it("puts moved content back, removes the relocation destination, and commits nothing when the import fails", async () => {
+    seedManifest(["codex"], {
+      alpha: { version: "1.0.0" },
+      gamma: { version: "1.0.0" },
+    });
+    placeLegacy("alpha", "# legacy alpha"); // relocated
+    placeCurrent("gamma", "# current gamma"); // reclaimed
+    placeLegacy("gamma", "# legacy gamma");
+    breakTheCommit();
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    // The move is undone at both ends...
+    expect(readFileSync(join(legacyDirOf("alpha"), "SKILL.md"), "utf8")).toBe(
+      "# legacy alpha",
+    );
+    expect(existsSync(currentDirOf("alpha"))).toBe(false);
+    // ...the reclaimed copy is back...
+    expect(readFileSync(join(legacyDirOf("gamma"), "SKILL.md"), "utf8")).toBe(
+      "# legacy gamma",
+    );
+    expect(readFileSync(join(currentDirOf("gamma"), "SKILL.md"), "utf8")).toBe(
+      "# current gamma",
+    );
+    // ...nothing this run placed survives...
+    expect(existsSync(join(currentDirOf("example-skill"), "SKILL.md"))).toBe(
+      false,
+    );
+    // ...the manifest is byte-identical...
+    expectManifestUnchanged();
+    // ...and nothing was committed.
+    expect(await commitCount(target)).toBe(0);
+  });
+
+  it("still reports “nothing was changed” verbatim when a refusal follows no migration at all", async () => {
+    seedManifest(["codex"]);
+    vi.mocked(registryFolderExists).mockResolvedValue({
+      ok: true,
+      exists: false,
+    });
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    expect(consoleErrors).toEqual([
+      'hatch import: "example-skill" was not found in the registry for harness "codex" — nothing was changed.',
+    ]);
+  });
+
+  it("restores the migration and makes the same claim when a refusal follows one", async () => {
+    seedManifest(["codex"], { alpha: { version: "1.0.0" } });
+    placeLegacy("alpha");
+    vi.mocked(registryFolderExists).mockResolvedValue({
+      ok: true,
+      exists: false,
+    });
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(1);
+    // Byte-identical to the refusal above: the project really was put back.
+    expect(consoleErrors).toEqual([
+      'hatch import: "example-skill" was not found in the registry for harness "codex" — nothing was changed.',
+    ]);
+    expect(readFileSync(join(legacyDirOf("alpha"), "SKILL.md"), "utf8")).toBe(
+      "# legacy alpha",
+    );
+    expect(existsSync(currentDirOf("alpha"))).toBe(false);
+    expect(await commitCount(target)).toBe(0);
+  });
+});
+
+describe("runImport — an otherwise unchanged import still commits the migration", () => {
+  const migrationCommit = "hatch import: migrate harness directories";
+
+  it("commits and reports on the AF-10 standing-exact-pin path", async () => {
+    seedManifest(["codex"], {
+      alpha: { version: "1.0.0", pin: { type: "exact", value: "1.0.0" } },
+    });
+    placeLegacy("alpha");
+
+    const exitCode = await runImport(["alpha", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs).toContain(
+      'hatch import: "alpha" is pinned at v1.0.0 — left untouched.',
+    );
+    expect(migrationLines()).toEqual([movedLine("alpha")]);
+    expect(await commitCount(target)).toBe(1);
+    expect((await simpleGit(target).log()).latest?.message).toBe(
+      `${migrationCommit} (1 moved, 0 reclaimed)`,
+    );
+  });
+
+  it("commits and reports on the group already-up-to-date path", async () => {
+    seedManifest(["codex"], {
+      "my-group": { version: "1.0.0" },
+      a: { version: "1.0.0", group: "my-group" },
+    });
+    placeLegacy("a");
+    mockNestedGroup("1.0.0");
+
+    const exitCode = await runImport(["my-group", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs.some((l) => l.includes("already up to date"))).toBe(
+      true,
+    );
+    expect(migrationLines()).toEqual([movedLine("a")]);
+    expect(await commitCount(target)).toBe(1);
+    expect((await simpleGit(target).log()).latest?.message).toBe(
+      `${migrationCommit} (1 moved, 0 reclaimed)`,
+    );
+  });
+
+  it("commits and reports on the standalone already-up-to-date path", async () => {
+    seedManifest(["codex"], {
+      alpha: { version: "1.0.0" },
+      gamma: { version: "1.0.0" },
+    });
+    placeLegacy("alpha"); // relocated
+    placeCurrent("gamma"); // present in both — reclaimed
+    placeLegacy("gamma");
+    mockSkill("alpha", "1.0.0");
+
+    const exitCode = await runImport(["alpha", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs.some((l) => l.includes("already up to date"))).toBe(
+      true,
+    );
+    // Moved lines precede reclaimed lines, and both print last.
+    expect(migrationLines()).toEqual([
+      movedLine("alpha"),
+      reclaimedLine("gamma"),
+    ]);
+    expect(consoleLogs.slice(-2)).toEqual([
+      movedLine("alpha"),
+      reclaimedLine("gamma"),
+    ]);
+    expect(await commitCount(target)).toBe(1);
+    expect((await simpleGit(target).log()).latest?.message).toBe(
+      `${migrationCommit} (1 moved, 1 reclaimed)`,
+    );
+  });
+
+  it("commits and reports on the standalone local-edits path", async () => {
+    seedManifest(["codex"], {
+      alpha: {
+        version: "1.0.0",
+        contentHash: hashEntries([["SKILL.md", "# alpha as Hatch placed it"]]),
+      },
+    });
+    placeLegacy("alpha", "# alpha, hand-edited");
+    mockSkill("alpha", "1.1.0", [["SKILL.md", "# alpha v1.1.0"]]);
+
+    const exitCode = await runImport(["alpha", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(consoleLogs).toContain(
+      'hatch import: "alpha" has local edits — left untouched.',
+    );
+    expect(migrationLines()).toEqual([movedLine("alpha")]);
+    expect(await commitCount(target)).toBe(1);
+    expect((await simpleGit(target).log()).latest?.message).toBe(
+      `${migrationCommit} (1 moved, 0 reclaimed)`,
+    );
+  });
+
+  it("makes no commit and says nothing about a migration on any of those paths when there was none", async () => {
+    // AF-10 standing exact pin.
+    seedManifest(["codex"], {
+      alpha: { version: "1.0.0", pin: { type: "exact", value: "1.0.0" } },
+    });
+    expect(await runImport(["alpha", "--path", target])).toBe(0);
+    expect(consoleLogs).toContain(
+      'hatch import: "alpha" is pinned at v1.0.0 — left untouched.',
+    );
+    expect(migrationLines()).toEqual([]);
+    expect(await commitCount(target)).toBe(0);
+
+    // Standalone already up to date.
+    consoleLogs.length = 0;
+    seedManifest(["codex"], { alpha: { version: "1.0.0" } });
+    placeCurrent("alpha");
+    mockSkill("alpha", "1.0.0");
+    expect(await runImport(["alpha", "--path", target])).toBe(0);
+    expect(consoleLogs.some((l) => l.includes("already up to date"))).toBe(
+      true,
+    );
+    expect(migrationLines()).toEqual([]);
+    expect(await commitCount(target)).toBe(0);
+
+    // Standalone local edits.
+    consoleLogs.length = 0;
+    seedManifest(["codex"], {
+      alpha: { version: "1.0.0", contentHash: "never-matches-what-is-on-disk" },
+    });
+    mockSkill("alpha", "1.1.0", [["SKILL.md", "# alpha v1.1.0"]]);
+    expect(await runImport(["alpha", "--path", target])).toBe(0);
+    expect(consoleLogs).toContain(
+      'hatch import: "alpha" has local edits — left untouched.',
+    );
+    expect(migrationLines()).toEqual([]);
+    expect(await commitCount(target)).toBe(0);
+
+    // Group already up to date.
+    consoleLogs.length = 0;
+    seedManifest(["codex"], {
+      "my-group": { version: "1.0.0" },
+      a: { version: "1.0.0", group: "my-group" },
+    });
+    mockNestedGroup("1.0.0");
+    expect(await runImport(["my-group", "--path", target])).toBe(0);
+    expect(consoleLogs.some((l) => l.includes("already up to date"))).toBe(
+      true,
+    );
+    expect(migrationLines()).toEqual([]);
+    expect(await commitCount(target)).toBe(0);
+  });
+});
+
+describe("runImport — the migration is reported", () => {
+  it("names what moved and what was reclaimed, moved first, printed last", async () => {
+    seedManifest(["codex"], {
+      alpha: { version: "1.0.0" },
+      gamma: { version: "1.0.0" },
+    });
+    placeLegacy("alpha"); // previous directory only — moved
+    placeCurrent("gamma"); // present in both — reclaimed
+    placeLegacy("gamma");
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    // Exact wording, `/`-separated on every platform.
+    expect(consoleLogs).toContain(
+      '  moved ".codex/skills/alpha" to ".agents/skills/alpha" — carried across to the directory the "codex" harness now uses.',
+    );
+    expect(consoleLogs).toContain(
+      '  reclaimed ".codex/skills/gamma" — removed from the directory the "codex" harness no longer uses.',
+    );
+    // After the import's own summary, moved before reclaimed, and last.
+    expect(consoleLogs[0]).toContain('added "example-skill"');
+    expect(consoleLogs.slice(-2)).toEqual([
+      movedLine("alpha"),
+      reclaimedLine("gamma"),
+    ]);
+  });
+});
+
+// A group's own manifest entry names no placed content: members are unpacked
+// flat under their own names (ADR-0013), so nothing was ever written to
+// `<harness>/skills/<group-name>`. Anything sitting there is the developer's.
+describe("runImport — a group's own name is not migrated", () => {
+  it("leaves a directory named after a group exactly where it is", async () => {
+    seedManifest(["codex"], {
+      "my-group": { version: "1.0.0" },
+      alpha: { version: "1.0.0", group: "my-group" },
+    });
+    // The developer's own notes, at a path Hatch never placed anything.
+    placeLegacy("my-group", "# my own notes, not Hatch's");
+    placeLegacy("alpha");
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    // The member is migrated, being real placed content.
+    expect(existsSync(legacyDirOf("alpha"))).toBe(false);
+    expect(readFileSync(join(currentDirOf("alpha"), "SKILL.md"), "utf8")).toBe(
+      "# legacy alpha",
+    );
+    // The group's name is not touched, in either direction.
+    expect(
+      readFileSync(join(legacyDirOf("my-group"), "SKILL.md"), "utf8"),
+    ).toBe("# my own notes, not Hatch's");
+    expect(existsSync(currentDirOf("my-group"))).toBe(false);
+    expect(consoleLogs.join("\n")).not.toContain("my-group");
+    // Still holding the developer's directory, so the legacy tree stays.
+    expect(existsSync(join(target, LEGACY_DIR))).toBe(true);
+  });
+
+  it("does not delete a group-named directory when the destination is occupied", async () => {
+    seedManifest(["codex"], {
+      "my-group": { version: "1.0.0" },
+      alpha: { version: "1.0.0", group: "my-group" },
+    });
+    placeLegacy("my-group", "# my own notes, not Hatch's");
+    placeCurrent("my-group", "# something else of mine");
+
+    const exitCode = await runImport(["example-skill", "--path", target]);
+
+    expect(exitCode).toBe(0);
+    expect(
+      readFileSync(join(legacyDirOf("my-group"), "SKILL.md"), "utf8"),
+    ).toBe("# my own notes, not Hatch's");
+    expect(
+      readFileSync(join(currentDirOf("my-group"), "SKILL.md"), "utf8"),
+    ).toBe("# something else of mine");
   });
 });

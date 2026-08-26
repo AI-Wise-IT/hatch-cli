@@ -26,6 +26,8 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -49,6 +51,13 @@ import {
   pinsEqual,
   resolvePin,
 } from "../manifest-migrations/pin-spec.js";
+import {
+  type FileSnapshot,
+  createSnapshot,
+  restoreSnapshot,
+  snapshotTree,
+  treeIsEmpty,
+} from "../project/file-snapshot.js";
 import { isTestProject } from "../project/test-project.js";
 import {
   type VersionControl,
@@ -123,27 +132,285 @@ interface PlacementTarget {
 // while fetching the resolved folder's content.
 class RegistryUnreachableError extends Error {}
 
-// Removes whatever this run wrote and puts the manifest back. Returns
-// undefined on a clean rollback, or the reason it could not finish.
+// Everything one run has done to the project that a failure has to undo, in
+// the four shapes an undo takes. Held in one place so every rollback — the
+// main placement path's, the pin-only path's, and a refusal that happens
+// after the migration pass — puts back exactly the same things.
+interface UndoLog {
+  // Files this run wrote, removed individually: their directories may hold
+  // content this run did not place.
+  writtenFiles: string[];
+  // Directories relocation moved content into, removed whole. Safe because
+  // relocation only ever moves into a destination that was absent.
+  relocatedDestinations: string[];
+  // Directories the migration pruned once emptied, recreated so a refusal
+  // really does leave the project exactly as it found it.
+  prunedDirectories: string[];
+  // Byte-for-byte copies of everything the migration moved out of or removed,
+  // rewritten at their original paths.
+  snapshot: FileSnapshot;
+}
+
+function createUndoLog(): UndoLog {
+  return {
+    writtenFiles: [],
+    relocatedDestinations: [],
+    prunedDirectories: [],
+    snapshot: createSnapshot(),
+  };
+}
+
+// True when this run has not yet touched the project, so a refusal can report
+// "nothing was changed" without doing any work to make that true.
+function undoIsEmpty(undo: UndoLog): boolean {
+  return (
+    undo.writtenFiles.length === 0 &&
+    undo.relocatedDestinations.length === 0 &&
+    undo.prunedDirectories.length === 0 &&
+    undo.snapshot.size === 0
+  );
+}
+
+// Removes whatever this run wrote, puts back whatever it moved or deleted, and
+// restores the manifest. Returns undefined on a clean rollback, or the reason
+// it could not finish.
 //
 // Recovery must never throw on its own account: an exception here would
 // replace the failure the caller is trying to report with a stack trace, and
 // would bury the one condition that matters most — placed content and the
 // manifest having ended up describing different states.
 function rollback(
-  writtenFiles: string[],
+  targetPath: string,
+  undo: UndoLog,
   manifestPath: string,
   originalManifestRaw: string,
 ): string | undefined {
   try {
-    for (const file of writtenFiles) {
+    for (const file of undo.writtenFiles) {
       rmSync(file, { force: true });
+    }
+    for (const destination of undo.relocatedDestinations) {
+      rmSync(destination, { recursive: true, force: true });
+    }
+    restoreSnapshot(targetPath, undo.snapshot);
+    for (const dir of undo.prunedDirectories) {
+      mkdirSync(dir, { recursive: true });
     }
     writeFileSync(manifestPath, originalManifestRaw, "utf8");
     return undefined;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
+}
+
+// The tail a refusal carries once the migration pass may have run: the claim
+// every refusal has always made, or — when putting the project back could not
+// be completed — a report that the claim no longer holds.
+function unchangedTail(restoreFailure: string | undefined): string {
+  return restoreFailure === undefined
+    ? " — nothing was changed."
+    : `, and the migration of this project's harness directories could not be undone (${restoreFailure}) — this project's content may now be split across the directories its harnesses use; compare them before running Hatch again.`;
+}
+
+// One entry the migration pass carried across into the harness's current
+// directory, held so the summary can name it.
+interface RelocatedEntry {
+  harness: string;
+  from: string;
+  to: string;
+}
+
+// One entry the migration pass removed from a harness's previously occupied
+// directory, held so the summary can name it.
+interface ReclaimedEntry {
+  harness: string;
+  path: string;
+}
+
+interface Migration {
+  relocated: RelocatedEntry[];
+  reclaimed: ReclaimedEntry[];
+}
+
+// True when the migration moved or removed a recorded entry — which is a real
+// change to the project, and so something to report and to commit, even on a
+// run that would otherwise have changed nothing. A directory pruned once
+// emptied is not itself work: version control does not track one.
+function migrationDidWork(migration: Migration): boolean {
+  return migration.relocated.length > 0 || migration.reclaimed.length > 0;
+}
+
+// Removes `dir` when it holds nothing at all, recording it so a rollback can
+// put it back. Used only to retire a directory the migration has just emptied
+// — a directory still holding anything is left exactly as it was found.
+function removeIfEmpty(dir: string, undo: UndoLog): boolean {
+  if (!existsSync(dir) || readdirSync(dir).length > 0) {
+    return false;
+  }
+  rmSync(dir, { recursive: true, force: true });
+  undo.prunedDirectories.push(dir);
+  return true;
+}
+
+// The manifest names a group as well as its members, but a group has no
+// placed content of its own — members are unpacked flat under their own
+// names (ADR-0013), and a group's entry carries no contentHash for exactly
+// that reason (ADR-0034). A group is recognized the way `hatch remove`
+// already recognizes one: by the members pointing back at it, since its own
+// entry carries no marker (ADR-0017).
+function deployedEntryNames(skills: Record<string, SkillEntry>): string[] {
+  const groupNames = new Set(
+    Object.values(skills)
+      .map((entry) => entry.group)
+      .filter((group): group is string => group !== undefined),
+  );
+  return Object.keys(skills).filter((name) => !groupNames.has(name));
+}
+
+// A harness whose recorded directory has moved (harness-registry.json's
+// `previousSkillsDir`) leaves content behind at the one it used to occupy:
+// content the harness can no longer find, or — once this import places a
+// fresh copy — a second, permanently stale copy it still would. Migration
+// answers both, per declared harness, in one pass over the entries the
+// project's manifest records:
+//
+//   - present in the previous directory and absent from the current one, the
+//     entry is *moved* across. The content on disk is what the manifest's
+//     contentHash describes, so moving carries the recorded version, pin and
+//     hash over unchanged, needs no network, and preserves a local edit.
+//   - present in both, the previous directory's copy is *reclaimed* — the
+//     current one is authoritative and is left exactly as it is.
+//
+// Only recorded entries are touched, never the directory wholesale: the old
+// location is an ordinary directory a developer may have put other things in,
+// and Hatch has no record of what it placed there beyond the manifest's own
+// list. The previously occupied directory and its parent are retired only
+// once doing so leaves nothing behind.
+//
+// "Recorded" means recorded *and deployed*. A group's own manifest entry is
+// neither — groups are unpacked flat and only their members are ever placed
+// (ADR-0013), so nothing named after a group was written by Hatch under any
+// harness directory. Anything sitting at that path is the developer's, and
+// `deployedNames` is what keeps this from moving or deleting it.
+//
+// Every move and every delete is logged first, so import's own rollback puts
+// the project back exactly as it found it.
+function migrateHarnessDirectories(
+  targetPath: string,
+  harnesses: string[],
+  deployedNames: string[],
+  undo: UndoLog,
+): Migration {
+  const migration: Migration = { relocated: [], reclaimed: [] };
+  for (const harness of harnesses) {
+    const { skillsDir, previousSkillsDir } = getHarnessDefinition(harness);
+    if (previousSkillsDir === undefined) {
+      continue;
+    }
+    const previousDir = join(targetPath, previousSkillsDir);
+    // The whole cost of this step for a project that never used the old
+    // location — which, before long, is every project.
+    if (!existsSync(previousDir)) {
+      continue;
+    }
+    for (const name of deployedNames) {
+      const previousEntryDir = join(previousDir, name);
+      if (!existsSync(previousEntryDir)) {
+        continue;
+      }
+      const currentEntryDir = join(targetPath, skillsDir, name);
+
+      // A directory holding no file at all is not content — the harness finds
+      // nothing in it either way, and version control does not track one. One
+      // left in the previous directory is swept up without being reported as
+      // reclaimed; one in the current directory does not make the entry
+      // "present in both", so the real copy is still carried across.
+      if (treeIsEmpty(previousEntryDir)) {
+        rmSync(previousEntryDir, { recursive: true, force: true });
+        undo.prunedDirectories.push(previousEntryDir);
+        continue;
+      }
+
+      snapshotTree(targetPath, previousEntryDir, undo.snapshot);
+
+      if (existsSync(currentEntryDir) && !treeIsEmpty(currentEntryDir)) {
+        rmSync(previousEntryDir, { recursive: true, force: true });
+        migration.reclaimed.push({
+          harness,
+          path: `${previousSkillsDir}/${name}`,
+        });
+        continue;
+      }
+
+      if (existsSync(currentEntryDir)) {
+        rmSync(currentEntryDir, { recursive: true, force: true });
+        undo.prunedDirectories.push(currentEntryDir);
+      }
+      mkdirSync(dirname(currentEntryDir), { recursive: true });
+      renameSync(previousEntryDir, currentEntryDir);
+      undo.relocatedDestinations.push(currentEntryDir);
+      migration.relocated.push({
+        harness,
+        from: `${previousSkillsDir}/${name}`,
+        to: `${skillsDir}/${name}`,
+      });
+    }
+    if (removeIfEmpty(previousDir, undo)) {
+      removeIfEmpty(dirname(previousDir), undo);
+    }
+  }
+  return migration;
+}
+
+// The migration's own lines in the import summary, in the order the work
+// happened: what was carried across, then what was left behind and removed.
+function reportMigration(migration: Migration): void {
+  for (const entry of migration.relocated) {
+    console.log(
+      `  moved "${entry.from}" to "${entry.to}" — carried across to the directory the "${entry.harness}" harness now uses.`,
+    );
+  }
+  for (const entry of migration.reclaimed) {
+    console.log(
+      `  reclaimed "${entry.path}" — removed from the directory the "${entry.harness}" harness no longer uses.`,
+    );
+  }
+}
+
+function migrationCommitMessage(migration: Migration): string {
+  return `hatch import: migrate harness directories (${migration.relocated.length} moved, ${migration.reclaimed.length} reclaimed)`;
+}
+
+// Concludes a run whose only effect is the migration pass — the paths that
+// would otherwise have returned having changed nothing. A migration that did
+// work is a real change to the project, so it is committed on its own and
+// reported rather than left uncommitted and unmentioned; with nothing
+// migrated this is the same no-op it has always been.
+async function commitMigrationOnly(
+  vc: VersionControl,
+  targetPath: string,
+  migration: Migration,
+  undo: UndoLog,
+  manifestPath: string,
+  originalManifestRaw: string,
+): Promise<number> {
+  if (!migrationDidWork(migration)) {
+    return 0;
+  }
+  try {
+    await vc.commit(migrationCommitMessage(migration));
+  } catch (error) {
+    console.error(
+      failureMessage(
+        "failed to migrate this project's harness directories",
+        error,
+        rollback(targetPath, undo, manifestPath, originalManifestRaw),
+      ),
+    );
+    return 1;
+  }
+  reportMigration(migration);
+  return 0;
 }
 
 // The message for a failed operation, escalated when the rollback itself
@@ -435,13 +702,58 @@ export async function runImport(argv: string[]): Promise<number> {
 
   const existingEntry = existingSkills[name];
 
+  // Everything this run does to the project, logged as it happens so any
+  // refusal or failure below can put the project back exactly as it found it.
+  const undo = createUndoLog();
+
+  // Carry each declared harness's content across from a directory it no longer
+  // occupies, and reclaim what is left there. Deliberately here: ahead of the
+  // staleness and local-edit checks, which hash the harness's *current*
+  // directory and would otherwise read an entry that still lives in the
+  // previous one as an empty tree — reporting a local edit nobody made and
+  // returning before any of this could run.
+  let migration: Migration;
+  try {
+    migration = migrateHarnessDirectories(
+      targetPath,
+      sortedHarnesses,
+      deployedEntryNames(existingSkills),
+      undo,
+    );
+  } catch (error) {
+    console.error(
+      failureMessage(
+        "failed to migrate this project's harness directories",
+        error,
+        rollback(targetPath, undo, manifestPath, originalManifestRaw),
+      ),
+    );
+    return 1;
+  }
+
+  // The tail of a refusal reached after the migration pass: it puts the
+  // project back first, so "nothing was changed" stays true.
+  const undoMigration = (): string =>
+    undoIsEmpty(undo)
+      ? " — nothing was changed."
+      : unchangedTail(
+          rollback(targetPath, undo, manifestPath, originalManifestRaw),
+        );
+
   // AF-10: a bare re-import of a standing exact pin skips the update check
   // entirely — no fetch of the primary target at all.
   if (spec.kind === "none" && existingEntry?.pin?.type === "exact") {
     console.log(
       `hatch import: "${name}" is pinned at v${existingEntry.pin.value} — left untouched.`,
     );
-    return 0;
+    return commitMigrationOnly(
+      vc,
+      targetPath,
+      migration,
+      undo,
+      manifestPath,
+      originalManifestRaw,
+    );
   }
 
   const newPin = resolvePin(spec, existingEntry?.pin);
@@ -454,7 +766,7 @@ export async function runImport(argv: string[]): Promise<number> {
   // indistinguishable from outside.
   if (!allowTesting && isTestingSkillName(name)) {
     console.error(
-      `hatch import: ${unavailableMessage(name, fetchRef, primaryHarness)} — nothing was changed.`,
+      `hatch import: ${unavailableMessage(name, fetchRef, primaryHarness)}${undoMigration()}`,
     );
     return 1;
   }
@@ -472,7 +784,7 @@ export async function runImport(argv: string[]): Promise<number> {
   if (!classifyResult.ok) {
     if (classifyResult.reason === "unreachable") {
       console.error(
-        `hatch import: ${fetchFailureMessage(classifyResult)} — nothing was changed.`,
+        `hatch import: ${fetchFailureMessage(classifyResult)}${undoMigration()}`,
       );
       return 1;
     }
@@ -483,7 +795,7 @@ export async function runImport(argv: string[]): Promise<number> {
     // opportunistic group/plain-skill probe).
     if (fetchRef) {
       console.error(
-        `hatch import: ${notFoundPinnedMessage(fetchRef)} — nothing was changed.`,
+        `hatch import: ${notFoundPinnedMessage(fetchRef)}${undoMigration()}`,
       );
       return 1;
     }
@@ -502,7 +814,7 @@ export async function runImport(argv: string[]): Promise<number> {
       meta = parseGroupSkillJson(classifyResult.content, name);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`hatch import: ${message} — nothing was changed.`);
+      console.error(`hatch import: ${message}${undoMigration()}`);
       return 1;
     }
 
@@ -514,7 +826,7 @@ export async function runImport(argv: string[]): Promise<number> {
     // are unaffected; both remain AF-4's existing warn-only path.
     if (!existingEntry && meta.removed) {
       console.error(
-        `hatch import: "${name}" is marked removed in the registry and cannot be imported for the first time — nothing was changed.`,
+        `hatch import: "${name}" is marked removed in the registry and cannot be imported for the first time${undoMigration()}`,
       );
       return 1;
     }
@@ -524,7 +836,7 @@ export async function runImport(argv: string[]): Promise<number> {
     // the name check above reports it.
     if (!allowTesting && declaresTesting(meta)) {
       console.error(
-        `hatch import: ${unavailableMessage(name, fetchRef, primaryHarness)} — nothing was changed.`,
+        `hatch import: ${unavailableMessage(name, fetchRef, primaryHarness)}${undoMigration()}`,
       );
       return 1;
     }
@@ -556,7 +868,7 @@ export async function runImport(argv: string[]): Promise<number> {
         );
         if (!rootFolderFetch.ok) {
           console.error(
-            `hatch import: ${fetchFailureMessage(rootFolderFetch)} — nothing was changed.`,
+            `hatch import: ${fetchFailureMessage(rootFolderFetch)}${undoMigration()}`,
           );
           return 1;
         }
@@ -571,7 +883,7 @@ export async function runImport(argv: string[]): Promise<number> {
         );
         if (!resolveResult.ok) {
           console.error(
-            `hatch import: ${fetchFailureMessage(resolveResult)} — nothing was changed.`,
+            `hatch import: ${fetchFailureMessage(resolveResult)}${undoMigration()}`,
           );
           return 1;
         }
@@ -629,7 +941,14 @@ export async function runImport(argv: string[]): Promise<number> {
           console.log(
             `hatch import: "${name}" is already up to date (v${existingEntry.version}).`,
           );
-          return 0;
+          return commitMigrationOnly(
+            vc,
+            targetPath,
+            migration,
+            undo,
+            manifestPath,
+            originalManifestRaw,
+          );
         }
       }
     }
@@ -653,7 +972,7 @@ export async function runImport(argv: string[]): Promise<number> {
         );
         if (!folderName) {
           console.error(
-            `hatch import: ${notFoundForHarnessMessage(name, harness)} — nothing was changed.`,
+            `hatch import: ${notFoundForHarnessMessage(name, harness)}${undoMigration()}`,
           );
           return 1;
         }
@@ -662,7 +981,7 @@ export async function runImport(argv: string[]): Promise<number> {
     } catch (error) {
       if (error instanceof RegistryUnreachableError) {
         console.error(
-          `hatch import: registry unreachable (${error.message}) — nothing was changed.`,
+          `hatch import: registry unreachable (${error.message})${undoMigration()}`,
         );
         return 1;
       }
@@ -681,7 +1000,7 @@ export async function runImport(argv: string[]): Promise<number> {
       );
       if (!primaryMeta.ok) {
         console.error(
-          `hatch import: ${fetchFailureMessage(primaryMeta)} — nothing was changed.`,
+          `hatch import: ${fetchFailureMessage(primaryMeta)}${undoMigration()}`,
         );
         return 1;
       }
@@ -691,7 +1010,14 @@ export async function runImport(argv: string[]): Promise<number> {
           console.log(
             `hatch import: "${name}" is already up to date (v${existingEntry.version}).`,
           );
-          return 0;
+          return commitMigrationOnly(
+            vc,
+            targetPath,
+            migration,
+            undo,
+            manifestPath,
+            originalManifestRaw,
+          );
         }
         pinOnlyChange = true;
       }
@@ -704,7 +1030,7 @@ export async function runImport(argv: string[]): Promise<number> {
         const result = await fetchRegistryFolder(token, folderName, fetchRef);
         if (!result.ok) {
           console.error(
-            `hatch import: ${fetchFailureMessage(result)} — nothing was changed.`,
+            `hatch import: ${fetchFailureMessage(result)}${undoMigration()}`,
           );
           return 1;
         }
@@ -736,7 +1062,14 @@ export async function runImport(argv: string[]): Promise<number> {
           console.log(
             `hatch import: "${name}" has local edits — left untouched.`,
           );
-          return 0;
+          return commitMigrationOnly(
+            vc,
+            targetPath,
+            migration,
+            undo,
+            manifestPath,
+            originalManifestRaw,
+          );
         }
       }
       placementTargets = [
@@ -802,7 +1135,7 @@ export async function runImport(argv: string[]): Promise<number> {
         failureMessage(
           `failed to update the pin for "${name}"`,
           error,
-          rollback([], manifestPath, originalManifestRaw),
+          rollback(targetPath, undo, manifestPath, originalManifestRaw),
         ),
       );
       return 1;
@@ -812,13 +1145,16 @@ export async function runImport(argv: string[]): Promise<number> {
         ? `hatch import: "${name}" recorded as ${newPin.type === "exact" ? "exactly pinned" : "range-pinned"} at v${newPin.value} (already at v${(existingEntry as SkillEntry).version}).`
         : `hatch import: cleared the version pin for "${name}" (still at v${(existingEntry as SkillEntry).version}).`,
     );
+    // The migration rode along in the commit above, so it is reported here
+    // rather than committed again.
+    reportMigration(migration);
     return 0;
   }
 
   const interactive = Boolean(process.stdin.isTTY);
   const conflictOutcomes: ConflictOutcome[] = [];
-  const writtenFiles: string[] = [];
   const contentHashes = new Map<string, string>();
+  const writtenFiles = undo.writtenFiles;
 
   try {
     // UC-3 steps 5-6: check each destination path and place content per
@@ -953,7 +1289,7 @@ export async function runImport(argv: string[]): Promise<number> {
       failureMessage(
         `failed to import "${name}"`,
         error,
-        rollback(writtenFiles, manifestPath, originalManifestRaw),
+        rollback(targetPath, undo, manifestPath, originalManifestRaw),
       ),
     );
     return 1;
@@ -1004,6 +1340,7 @@ export async function runImport(argv: string[]): Promise<number> {
       );
     }
   }
+  reportMigration(migration);
 
   return 0;
 }
@@ -1207,7 +1544,10 @@ async function runAddHarness(
   // flow's update path, which skips it for content already known Hatch-placed.
   const interactive = Boolean(process.stdin.isTTY);
   const conflictOutcomes: ConflictOutcome[] = [];
-  const writtenFiles: string[] = [];
+  // Backfill only ever writes; it moves and removes nothing, so its undo log
+  // carries written files alone.
+  const undo = createUndoLog();
+  const writtenFiles = undo.writtenFiles;
   const excludedFromHashByItem = new Map<string, Set<string>>();
   try {
     const definition = getHarnessDefinition(harnessName);
@@ -1321,7 +1661,7 @@ async function runAddHarness(
       failureMessage(
         `failed to add harness "${harnessName}"`,
         error,
-        rollback(writtenFiles, manifestPath, originalManifestRaw),
+        rollback(targetPath, undo, manifestPath, originalManifestRaw),
       ),
     );
     return 1;

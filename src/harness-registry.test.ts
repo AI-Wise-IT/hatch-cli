@@ -19,8 +19,37 @@ describe("harness-registry", () => {
   it("exposes each harness's code and skills directory", () => {
     expect(getHarnessDefinition("codex")).toEqual({
       code: "cdx",
-      skillsDir: ".codex/skills",
+      skillsDir: ".agents/skills",
+      previousSkillsDir: ".codex/skills",
     });
+    expect(getHarnessDefinition("codex").skillsDir).toBe(".agents/skills");
+  });
+
+  // A harness's directory is registry data, independent of its reserved code
+  // (ADR-0033): codex's directory moved, its code did not move with it.
+  it("keeps a harness's reserved code independent of its directory", () => {
+    expect(getHarnessDefinition("claude").code).toBe("cld");
+    expect(getHarnessDefinition("codex").code).toBe("cdx");
+    expect(getHarnessDefinition("cursor").code).toBe("csr");
+  });
+
+  it("names the directory a moved harness previously occupied", () => {
+    expect(getHarnessDefinition("codex").previousSkillsDir).toBe(
+      ".codex/skills",
+    );
+  });
+
+  it("leaves the previous directory absent for a harness that never moved", () => {
+    expect(getHarnessDefinition("claude")).toEqual({
+      code: "cld",
+      skillsDir: ".claude/skills",
+    });
+    expect(getHarnessDefinition("claude").previousSkillsDir).toBeUndefined();
+    expect(getHarnessDefinition("cursor")).toEqual({
+      code: "csr",
+      skillsDir: ".cursor/skills",
+    });
+    expect(getHarnessDefinition("cursor").previousSkillsDir).toBeUndefined();
   });
 
   it("throws for an unknown harness", () => {

@@ -6,7 +6,8 @@
     },
     "codex": {
       "code": "cdx",
-      "skillsDir": ".codex/skills"
+      "skillsDir": ".agents/skills",
+      "previousSkillsDir": ".codex/skills"
     },
     "cursor": {
       "code": "csr",

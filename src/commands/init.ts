@@ -25,6 +25,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { authenticate } from "../auth/authenticate.js";
 import { getHarnessDefinition, isKnownHarness } from "../harness-registry.js";
+import { hashDiskTree } from "../manifest-migrations/content-hash.js";
 import { migrateManifest } from "../manifest-migrations/index.js";
 import { isTestProject } from "../project/test-project.js";
 import { openVersionControl } from "../project/version-control.js";
@@ -210,8 +211,33 @@ export async function runInit(argv: string[]): Promise<number> {
       // byte-identical to what it was before this flag existed.
       ...(testProject ? { testProject: true } : {}),
       skills: {
+        // 0034-content-hash-recorded-by-every-placing-command.md: init
+        // places content, so it records the baseline local-edit detection
+        // compares against — without it this entry would be permanently
+        // unprotected, since both `hatch import` and `hatch remove` read an
+        // absent hash as "no baseline" and grandfather the item as clean.
+        //
+        // Hashed from the destination tree rather than from the fetched
+        // files, because those two can differ: placement writes into the
+        // directory without clearing it, so anything already sitting there
+        // is left in place and would be absent from a fetch-derived hash.
+        // Import and remove both hash the whole directory, so a baseline
+        // that skipped such a file would report the untouched placement as
+        // locally edited the moment anything looked at it.
+        //
+        // The primary harness is the first alphabetically, the same one the
+        // comparison side reads (0034). Every declared harness receives an
+        // identical copy here, so which one that is does not change the
+        // value — only where it is read from.
         [SELF_DOC_SKILL_NAME]: {
           version: extractSkillVersion(fetchResult.files),
+          contentHash: hashDiskTree(
+            join(
+              targetPath,
+              getHarnessDefinition(sortedHarnesses[0] as string).skillsDir,
+              SELF_DOC_SKILL_NAME,
+            ),
+          ),
         },
       },
     });

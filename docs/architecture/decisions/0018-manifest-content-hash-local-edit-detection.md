@@ -4,7 +4,8 @@
 
 - **id:** 0018-manifest-content-hash-local-edit-detection
 - **component:** data-migrations
-- **status:** accepted
+- **status:** superseded
+- **superseded_by:** 0034-content-hash-recorded-by-every-placing-command
 - **applies_to:** `hatch.manifest.json`'s schema and migration logic (`src/manifest-migrations/index.ts`) in the Hatch CLI; `hatch import`'s re-import decision logic (`src/commands/import.ts`)
 - **decision_record:** `docs/architecture/decisions/0018-manifest-content-hash-local-edit-detection.md`
 
