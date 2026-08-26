@@ -36,12 +36,12 @@
 ## 6. Registry repository (`../hatch-skills`)
 
 - [x] 6.1 Correct `.codex/skills/<name>/` to `.agents/skills/<name>/` in `hatch-usage/SKILL.md`'s "Where skill content lives" section, and verify no `.codex` literal remains anywhere in the repository
-- [ ] 6.2 Bump `hatch-usage/skill.json` from `1.3.0` to `1.3.1` and verify that repository's CI version-bump check passes on the pull request
+- [x] 6.2 Bump `hatch-usage/skill.json` from `1.3.0` to `1.3.1` and verify that repository's CI version-bump check passes on the pull request
 
 ## 7. Verification
 
 - [x] 7.1 Run `npm run lint`, `npm run typecheck`, `npm run test`, and `npm run build` and verify all four pass
-- [ ] 7.2 Verify the CI collision-check job runs (its path filter matches the changed `src/harness-registry.json`) and passes against the live `hatch-skills` checkout
+- [x] 7.2 Verify the CI collision-check job runs (its path filter matches the changed `src/harness-registry.json`) and passes against the live `hatch-skills` checkout
 - [ ] 7.3 Acceptance-test by hand against a scratch project: initialize declaring `codex`, confirm placement under `.agents/skills/`, seed a `.codex/skills/` copy plus one unrecorded folder, run an import, and confirm the recorded copies are reclaimed, the unrecorded folder and its parents survive, and the whole thing is one commit
 - [ ] 7.4 Acceptance-test the migration by hand: in a scratch project declaring `codex`, move a recorded skill's content back to `.codex/skills/<name>/`, run `hatch import <name>` for that already-current entry, and confirm it is not reported as having local edits, its content is back under `.agents/skills/<name>/` unchanged, `.codex/` is gone, the summary names what moved, and exactly one commit was made
 - [x] 7.5 Verify `openspec validate move-codex-skills-directory --strict` passes before archiving
