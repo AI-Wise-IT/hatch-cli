@@ -2,17 +2,6 @@
   "statusCheck": false,
   "rules": [
     {
-      "id": "adr-0001-harness-suffix-convention",
-      "rule": "Enforce the Agent Rules of decision record 0001-harness-suffix-convention, supplied as review context. Establish that harness targeting is decided by the recorded suffix convention rather than by an ad-hoc name test introduced in this change.",
-      "scope": [
-        "src/harness-registry.ts",
-        "src/harness-registry.json",
-        "src/commands/import.ts",
-        "src/registry/**"
-      ],
-      "severity": "high"
-    },
-    {
       "id": "adr-0002-cli-runtime-nodejs",
       "rule": "Enforce the Agent Rules of decision record 0002-cli-runtime-nodejs, supplied as review context. Establish that this change introduces no runtime dependency the record does not permit, and no build or plumbing step outside the recorded toolchain.",
       "scope": ["package.json", "tsconfig.json", "src/**", "scripts/**"],
@@ -122,16 +111,6 @@
       "id": "adr-0017-manifest-schema-v2-group-membership",
       "rule": "Enforce the Agent Rules of decision record 0017-manifest-schema-v2-group-membership, supplied as review context. Establish that group membership is recorded in the manifest as that record settles, and that the migration path to it is intact.",
       "scope": ["src/manifest-migrations/index.ts", "src/commands/import.ts"],
-      "severity": "high"
-    },
-    {
-      "id": "adr-0018-manifest-content-hash-local-edit-detection",
-      "rule": "Enforce the Agent Rules of decision record 0018-manifest-content-hash-local-edit-detection, supplied as review context. Establish that local-edit detection compares what that record says it compares, and that a re-import decision cannot silently overwrite an edited file.",
-      "scope": [
-        "src/manifest-migrations/content-hash.ts",
-        "src/manifest-migrations/index.ts",
-        "src/commands/import.ts"
-      ],
       "severity": "high"
     },
     {
@@ -246,6 +225,31 @@
         "src/registry/group-resolve.ts",
         "src/registry/fetch.ts",
         "src/commands/import.ts"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "adr-0033-harness-suffix-convention-and-registry-directories",
+      "rule": "Enforce the Agent Rules of decision record 0033-harness-suffix-convention-and-registry-directories, supplied as review context. Establish that harness targeting is decided by the recorded suffix convention rather than by an ad-hoc name test introduced in this change, that every harness directory — current or previously occupied — is read from the harness registry rather than restated or derived from a harness's name or code, and that reclaiming a previously occupied directory removes only manifest-recorded entries, retires that directory and its parent only when emptied, and stays inside the import's own rollback and single commit.",
+      "scope": [
+        "src/harness-registry.ts",
+        "src/harness-registry.json",
+        "src/commands/import.ts",
+        "src/commands/init.ts",
+        "src/commands/remove.ts",
+        "src/registry/**"
+      ],
+      "severity": "high"
+    },
+    {
+      "id": "adr-0034-content-hash-recorded-by-every-placing-command",
+      "rule": "Enforce the Agent Rules of decision record 0034-content-hash-recorded-by-every-placing-command, supplied as review context. Establish that local-edit detection compares what that record says it compares, that a re-import decision cannot silently overwrite an edited file, and that every command placing skill content records that entry's contentHash in the same operation.",
+      "scope": [
+        "src/manifest-migrations/content-hash.ts",
+        "src/manifest-migrations/index.ts",
+        "src/commands/import.ts",
+        "src/commands/init.ts",
+        "src/commands/remove.ts"
       ],
       "severity": "high"
     }

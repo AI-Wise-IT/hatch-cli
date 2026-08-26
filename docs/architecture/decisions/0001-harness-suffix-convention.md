@@ -4,7 +4,8 @@
 
 - **id:** 0001-harness-suffix-convention
 - **component:** skill-registry-harness-targeting
-- **status:** accepted
+- **status:** superseded
+- **superseded_by:** 0033-harness-suffix-convention-and-registry-directories
 - **applies_to:** every skill folder under the skill registry's source tree; `hatch import`'s resolution and deployment logic; the registry's duplicate-destination-path publish lint
 - **decision_record:** `docs/architecture/decisions/0001-harness-suffix-convention.md`
 

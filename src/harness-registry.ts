@@ -1,8 +1,15 @@
-// Canonical harness registry (ADR-0001). The single source of truth mapping
+// Canonical harness registry (ADR-0033). The single source of truth mapping
 // each reserved harness code to the harness it identifies and where that
 // harness expects skill content placed. `hatch import`'s resolution logic,
 // the collision check, and any registry-browsing tooling all read this file
 // rather than hardcoding their own copy of the reserved set.
+//
+// A harness's directory is data here, not a literal in a command: it can move
+// without its name or its reserved code moving with it. When one does move,
+// the directory it used to occupy is recorded alongside the current one, so
+// `hatch import` can reclaim the content Hatch left behind there. That field
+// is present only while some project may still hold legacy content; deleting
+// it retires the reclamation with no code change.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -11,6 +18,9 @@ import { fileURLToPath } from "node:url";
 export interface HarnessDefinition {
   code: string;
   skillsDir: string;
+  // The directory this harness occupied before `skillsDir` moved. Absent for
+  // a harness that has never moved, which is every harness until one does.
+  previousSkillsDir?: string;
 }
 
 interface HarnessRegistryFile {

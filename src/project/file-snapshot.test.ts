@@ -71,14 +71,14 @@ describe("snapshotTree", () => {
 
   it("accumulates several trees into one snapshot", () => {
     placeGroupMember();
-    write(".codex/skills/member-one/SKILL.md", "# Member One");
+    write(".agents/skills/member-one/SKILL.md", "# Member One");
     const snapshot = createSnapshot();
 
     snapshotTree(project, join(project, ".claude/skills/member-one"), snapshot);
-    snapshotTree(project, join(project, ".codex/skills/member-one"), snapshot);
+    snapshotTree(project, join(project, ".agents/skills/member-one"), snapshot);
 
     expect(snapshot.size).toBe(4);
-    expect(snapshot.has(".codex/skills/member-one/SKILL.md")).toBe(true);
+    expect(snapshot.has(".agents/skills/member-one/SKILL.md")).toBe(true);
   });
 
   it("contributes nothing for a directory that does not exist", () => {
